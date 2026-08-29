@@ -16,7 +16,7 @@ class Medicine {
   final int stock;
   final String? unit;
   final String? location;
-  final String? image; // 图片路径
+  final List<String> images; // 多张图片路径
 
   const Medicine({
     required this.id,
@@ -29,8 +29,11 @@ class Medicine {
     this.stock = 0,
     this.unit,
     this.location,
-    this.image,
+    this.images = const [],
   });
+
+  /// 兼容旧数据：单张图片
+  String? get image => images.isEmpty ? null : images.first;
 
   Medicine copyWith({
     String? id,
@@ -43,7 +46,7 @@ class Medicine {
     int? stock,
     String? unit,
     String? location,
-    String? image,
+    List<String>? images,
     bool clearBarcode = false,
     bool clearSpec = false,
     bool clearManufacturer = false,
@@ -64,7 +67,7 @@ class Medicine {
       stock: stock ?? this.stock,
       unit: clearUnit ? null : (unit ?? this.unit),
       location: clearLocation ? null : (location ?? this.location),
-      image: clearImage ? null : (image ?? this.image),
+      images: clearImage ? const [] : (images ?? this.images),
     );
   }
 
@@ -79,22 +82,34 @@ class Medicine {
         'stock': stock,
         'unit': unit,
         'location': location,
-        'image': image,
+        if (images.isNotEmpty) 'images': images,
       };
 
-  factory Medicine.fromJson(Map<String, dynamic> json) => Medicine(
-        id: (json['id'] ?? '').toString(),
-        barcode: json['barcode'] as String?,
-        name: (json['name'] ?? '').toString(),
-        spec: json['spec'] as String?,
-        manufacturer: json['manufacturer'] as String?,
-        medType: json['medType'] as String?,
-        expireDate: json['expire_date'] as String?,
-        stock: (json['stock'] is num) ? (json['stock'] as num).toInt() : (int.tryParse('${json['stock']}') ?? 0),
-        unit: json['unit'] as String?,
-        location: json['location'] as String?,
-        image: json['image'] as String?,
-      );
+  factory Medicine.fromJson(Map<String, dynamic> json) {
+    List<String> images = [];
+    final imgs = json['images'];
+    if (imgs is List) {
+      images = imgs.whereType<String>().toList();
+    }
+    // 兼容旧数据：仅有单张 image 字段
+    final legacy = json['image'] as String?;
+    if (images.isEmpty && legacy != null && legacy.isNotEmpty) {
+      images = [legacy];
+    }
+    return Medicine(
+      id: (json['id'] ?? '').toString(),
+      barcode: json['barcode'] as String?,
+      name: (json['name'] ?? '').toString(),
+      spec: json['spec'] as String?,
+      manufacturer: json['manufacturer'] as String?,
+      medType: json['medType'] as String?,
+      expireDate: json['expire_date'] as String?,
+      stock: (json['stock'] is num) ? (json['stock'] as num).toInt() : (int.tryParse('${json['stock']}') ?? 0),
+      unit: json['unit'] as String?,
+      location: json['location'] as String?,
+      images: images,
+    );
+  }
 }
 
 /// add-medicine 页面常量与纯业务方法
@@ -117,8 +132,22 @@ class AddMedicineLogic {
     '栓剂': ['枚'],
   };
 
-  static List<String> getLocations() =>
-      ['药箱（客厅）', '药箱（厨房）', '冰箱', '卧室抽屉', '随身包', '办公室'];
+  /// 默认位置列表
+  static const List<String> defaultLocations = [
+    '药箱（客厅）', '药箱（厨房）', '冰箱', '卧室抽屉', '随身包', '办公室',
+  ];
+
+  /// 获取位置候选：默认位置 + 用户自定义记忆位置（去重）
+  static List<String> getLocations({List<String> custom = const []}) {
+    final result = <String>[...defaultLocations];
+    for (final loc in custom) {
+      final t = loc.trim();
+      if (t.isNotEmpty && !result.contains(t)) {
+        result.add(t);
+      }
+    }
+    return result;
+  }
 
   /// 校验药品必填字段。返回错误列表，空列表表示校验通过。
   static List<String> validateMedicine(Map<String, dynamic> data) {
@@ -195,7 +224,7 @@ class AddMedicineLogic {
         'stock': data['stock'] ?? 0,
         'unit': data['stockUnit'] as String? ?? '片',
         'location': data['location'] as String?,
-        'image': data['image'] as String? ?? '',
+        'images': data['images'] is List ? data['images'] : const [],
       };
 
   /// 生成唯一 id（对应 js 的 Date.now()+random）

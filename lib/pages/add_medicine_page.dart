@@ -36,7 +36,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
   // 图片
   String? _imagePreview; // AI 预览路径
-  String? _medImage; // 正式图片路径
+  final List<String> _images = []; // 正式图片路径（支持多张）
   bool _recognizing = false;
 
   // 有效期
@@ -78,7 +78,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
   int _typeSel = 0;
 
   Future<void> _showTypePicker() async {
-    final sel = await showModalBottomSheet<int>(
+    final sel = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
@@ -91,10 +91,11 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
       ),
     );
     if (sel == null) return;
-    final type = AddMedicineLogic.medTypes[sel];
+    final idx = AddMedicineLogic.medTypes.indexOf(sel);
+    final type = sel;
     final units = AddMedicineLogic.typeUnits[type] ?? ['片'];
     setState(() {
-      _typeSel = sel;
+      _typeSel = idx < 0 ? 0 : idx;
       _medType = type;
       _stockUnits = units;
       _stockUnit = units.first;
@@ -135,11 +136,17 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     );
     if (file == null) return;
     if (!mounted) return;
-    setState(() => _medImage = file.path);
+    setState(() => _images.add(file.path));
   }
 
-  void _onPickMedImage() {
-    _pickImage(camera: false);
+  Future<void> _onPickMedImage() async {
+    final source = await _chooseSource('添加图片');
+    if (source == null) return;
+    await _pickImage(camera: source == ImageSource.camera);
+  }
+
+  void _removeImageAt(int index) {
+    setState(() => _images.removeAt(index));
   }
 
   // ========== AI 拍照录入 ==========
@@ -154,7 +161,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     if (!mounted) return;
     setState(() {
       _imagePreview = file.path;
-      _medImage = file.path;
+      _images.add(file.path);
       _recognizing = true;
       _name = '';
       _spec = '';
@@ -271,9 +278,14 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
   // ========== 位置选择 ==========
   int _locSel = 0;
 
+  Future<List<String>> _loadCustomLocations() =>
+      _storage.loadCustomLocations();
+
   Future<void> _showLocationPicker() async {
-    final locs = AddMedicineLogic.getLocations();
-    final sel = await showModalBottomSheet<int>(
+    final custom = await _loadCustomLocations();
+    if (!mounted) return;
+    final locs = AddMedicineLogic.getLocations(custom: custom);
+    final result = await showModalBottomSheet<String?>(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
@@ -283,13 +295,17 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
         title: '选择存放位置',
         initial: _locSel,
         items: locs,
+        allowCustom: true,
       ),
     );
-    if (sel == null) return;
+    if (result == null) return;
     setState(() {
-      _locSel = sel;
-      _location = locs[sel];
+      _locSel = locs.indexOf(result);
+      if (_locSel == -1) _locSel = 0;
+      _location = result;
     });
+    // 记忆自定义位置
+    await _storage.addCustomLocation(result);
   }
 
   // ========== 提交 ==========
@@ -313,8 +329,11 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
       stock: _stock,
       unit: _stockUnit,
       location: _location,
-      image: _medImage,
+      images: List.of(_images),
     );
+    if (_location != null && _location!.trim().isNotEmpty) {
+      await _storage.addCustomLocation(_location!);
+    }
     await _storage.add(medicine);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('添加成功')));
@@ -548,57 +567,69 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
   }
 
   Widget _buildMedImage() {
-    if (_medImage != null && _medImage!.isNotEmpty) {
-      return Row(
-        children: [
-          Stack(
+    const itemSize = 80.0;
+    final children = <Widget>[];
+    for (var i = 0; i < _images.length; i++) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: _buildImage(_medImage!, width: 80, height: 80),
+                child: _buildImage(_images[i], width: itemSize, height: itemSize),
               ),
               Positioned(
-                top: 4,
-                right: 4,
+                top: -6,
+                right: -6,
                 child: GestureDetector(
-                  onTap: () => setState(() => _medImage = null),
+                  onTap: () => _removeImageAt(i),
                   child: Container(
-                    width: 24,
-                    height: 24,
+                    width: 22,
+                    height: 22,
                     decoration: const BoxDecoration(
-                      color: Color(0x80000000),
+                      color: Color(0xCC000000),
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
                     child: const Text('✕',
-                        style: TextStyle(fontSize: 14, color: Colors.white)),
+                        style: TextStyle(fontSize: 12, color: Colors.white)),
                   ),
                 ),
               ),
             ],
           ),
-        ],
+        ),
       );
     }
-    return GestureDetector(
-      onTap: _onPickMedImage,
-      child: Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFCCCCCC), width: 2),
-          borderRadius: BorderRadius.circular(8),
-          color: const Color(0xFFFAFAFA),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Text('📷', style: TextStyle(fontSize: 24)),
-            SizedBox(height: 4),
-            Text('点击添加图片', style: TextStyle(fontSize: 10, color: Color(0xFF999999))),
-          ],
+    // 添加按钮
+    children.add(
+      GestureDetector(
+        onTap: _onPickMedImage,
+        child: Container(
+          width: itemSize,
+          height: itemSize,
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xFFCCCCCC), width: 2),
+            borderRadius: BorderRadius.circular(8),
+            color: const Color(0xFFFAFAFA),
+          ),
+          child: const Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('📷', style: TextStyle(fontSize: 24)),
+              SizedBox(height: 4),
+              Text('添加图片', style: TextStyle(fontSize: 10, color: Color(0xFF999999))),
+            ],
+          ),
         ),
       ),
+    );
+    return Wrap(
+      spacing: 0,
+      runSpacing: 10,
+      children: children,
     );
   }
 
@@ -773,7 +804,13 @@ class _SimplePicker extends StatefulWidget {
   final String title;
   final int initial;
   final List<String> items;
-  const _SimplePicker({required this.title, required this.initial, required this.items});
+  final bool allowCustom;
+  const _SimplePicker({
+    required this.title,
+    required this.initial,
+    required this.items,
+    this.allowCustom = false,
+  });
 
   @override
   State<_SimplePicker> createState() => _SimplePickerState();
@@ -782,19 +819,55 @@ class _SimplePicker extends StatefulWidget {
 class _SimplePickerState extends State<_SimplePicker> {
   late int _sel;
 
+  // 自定义位置的虚拟索引（放在 items 末尾）
+  int get _customIdx => widget.items.length;
+
   @override
   void initState() {
     super.initState();
-    _sel = widget.initial.clamp(0, widget.items.length - 1);
+    _sel = widget.initial.clamp(0, _customIdx);
+  }
+
+  Future<void> _confirm() async {
+    if (_sel == _customIdx && widget.allowCustom) {
+      final controller = TextEditingController();
+      final text = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('输入自定义位置'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: '例如：床头柜'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+              child: const Text('确定', style: TextStyle(color: AppColors.brandBlue)),
+            ),
+          ],
+        ),
+      );
+      if (text == null || text.isEmpty) return;
+      if (!mounted) return;
+      Navigator.pop(context, text);
+      return;
+    }
+    if (!mounted) return;
+    Navigator.pop(context, widget.items[_sel]);
   }
 
   @override
   Widget build(BuildContext context) {
+    final displayItems = widget.allowCustom
+        ? <String>[...widget.items, '自定义位置…']
+        : widget.items;
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _pickerHeader(context, widget.title, onConfirm: () => Navigator.pop(context, _sel)),
+          _pickerHeader(context, widget.title, onConfirm: _confirm),
           SizedBox(
             height: 240,
             child: ListWheelScrollView.useDelegate(
@@ -802,9 +875,9 @@ class _SimplePickerState extends State<_SimplePicker> {
               physics: const FixedExtentScrollPhysics(),
               onSelectedItemChanged: (i) => _sel = i,
               childDelegate: ListWheelChildBuilderDelegate(
-                childCount: widget.items.length,
+                childCount: displayItems.length,
                 builder: (context, i) => Center(
-                  child: Text(widget.items[i],
+                  child: Text(displayItems[i],
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: i == _sel ? FontWeight.w600 : FontWeight.w400,

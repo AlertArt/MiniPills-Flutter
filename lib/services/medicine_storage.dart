@@ -7,6 +7,26 @@ import '../models/medicine.dart';
 class MedicineStorage {
   static const String _key = 'medList';
 
+  /// 自定义存放位置列表的存储 key
+  static const String _customLocationsKey = 'customLocations';
+
+  /// 读取自定义存放位置列表
+  Future<List<String>> loadCustomLocations() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_customLocationsKey) ?? <String>[];
+  }
+
+  /// 保存自定义存放位置（记忆列表，含默认位置时去重显示在 UI 层）
+  Future<void> addCustomLocation(String location) async {
+    final t = location.trim();
+    if (t.isEmpty) return;
+    final list = await loadCustomLocations();
+    if (list.contains(t)) return;
+    list.add(t);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_customLocationsKey, list);
+  }
+
   /// 读取药品列表
   Future<List<Medicine>> loadAll() async {
     final prefs = await SharedPreferences.getInstance();

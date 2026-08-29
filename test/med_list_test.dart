@@ -295,7 +295,7 @@ void main() {
         stock: 30,
         unit: '片',
         location: '冰箱',
-        image: '/a.jpg',
+        images: ['/a.jpg'],
       );
       final json = m.toJson();
       final back = Medicine.fromJson(json);
