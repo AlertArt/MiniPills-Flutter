@@ -799,7 +799,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
   }
 }
 
-/// ����ѡ���������� / ���λ�ã�
+/// 简单选择器（用于类型 / 存放位置）
 class _SimplePicker extends StatefulWidget {
   final String title;
   final int initial;
@@ -894,7 +894,7 @@ class _SimplePickerState extends State<_SimplePicker> {
   }
 }
 
-/// �� + �� ����ѡ����
+/// 年 + 月 有效期选择器
 class _YearMonthPicker extends StatefulWidget {
   final List<int> years;
   final List<String> months;
@@ -928,7 +928,7 @@ class _YearMonthPickerState extends State<_YearMonthPicker> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _pickerHeader(context, 'ѡ����Ч��',
+          _pickerHeader(context, '选择有效期',
               onConfirm: () => Navigator.pop(context, (_yearIdx, _monthIdx))),
           SizedBox(
             height: 240,
@@ -942,7 +942,7 @@ class _YearMonthPickerState extends State<_YearMonthPicker> {
                     childDelegate: ListWheelChildBuilderDelegate(
                       childCount: widget.years.length,
                       builder: (context, i) => Center(
-                        child: Text('${widget.years[i]}��',
+                        child: Text('${widget.years[i]}年',
                             style: const TextStyle(fontSize: 20, color: AppColors.brandText)),
                       ),
                     ),
@@ -956,7 +956,7 @@ class _YearMonthPickerState extends State<_YearMonthPicker> {
                     childDelegate: ListWheelChildBuilderDelegate(
                       childCount: widget.months.length,
                       builder: (context, i) => Center(
-                        child: Text('${widget.months[i]}��',
+                        child: Text('${widget.months[i]}月',
                             style: const TextStyle(fontSize: 20, color: AppColors.brandText)),
                       ),
                     ),
@@ -980,13 +980,13 @@ Widget _pickerHeader(BuildContext context, String title, {required VoidCallback 
       children: [
         GestureDetector(
           onTap: () => Navigator.pop(context),
-          child: const Text('ȡ��', style: TextStyle(fontSize: 14, color: Color(0xFF999999))),
+          child: const Text('取消', style: TextStyle(fontSize: 14, color: Color(0xFF999999))),
         ),
         Text(title,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.brandText)),
         GestureDetector(
           onTap: onConfirm,
-          child: const Text('ȷ��', style: TextStyle(fontSize: 14, color: AppColors.brandBlue)),
+          child: const Text('确定', style: TextStyle(fontSize: 14, color: AppColors.brandBlue)),
         ),
       ],
     ),
