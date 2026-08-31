@@ -35,8 +35,12 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-  # 本地持久化（对应小程序 wx.setStorageSync）
+  # 本地持久化（对应小程序 wx.setStorageSync）—— 保留用于一次性迁移旧 JSON 数据
   shared_preferences: ^2.3.0
+  # SQLite 主存储
+  sqflite: ^2.3.0
+  # 路径处理（SQLite 数据库文件路径）
+  path: ^1.9.0
   # 网络请求（AI 识别 / 云函数）
   http: ^1.2.0
   # 拍照 / 相册选图
@@ -47,6 +51,9 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # SQLite 单元测试（在纯 Dart 单元测试中运行真实 SQLite）
+  sqflite_common_ffi: ^2.3.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

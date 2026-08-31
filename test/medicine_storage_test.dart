@@ -1,0 +1,184 @@
+// MedicineStorage 使用 SQLite 的单元测试（通过 sqflite_common_ffi 在内存中运行真实 SQLite）
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'package:minipills_flutter/models/medicine.dart';
+import 'package:minipills_flutter/services/database_helper.dart';
+import 'package:minipills_flutter/services/medicine_storage.dart';
+
+void main() {
+  setUpAll(() {
+    // 在单元测试中用 FFI 提供真实 SQLite
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
+  setUp(() async {
+    // 每次用例使用独立的内存数据库，避免相互污染
+    await DatabaseHelper.instance.reset();
+    DatabaseHelper.instance.useDatabasePath(inMemoryDatabasePath);
+  });
+
+  tearDown(() async {
+    await DatabaseHelper.instance.reset();
+  });
+
+  Medicine makeMedicine(String id, {String name = '布洛芬', int stock = 1}) {
+    return Medicine(
+      id: id,
+      name: name,
+      barcode: '6901234567890',
+      expireDate: '2027-12-31',
+      stock: stock,
+      location: '药箱（客厅）',
+      unit: '片',
+      images: const ['/img/a.png', '/img/b.png'],
+    );
+  }
+
+  group('MedicineStorage SQLite', () {
+    test('add 后 loadAll 能读回完整数据（含多图）', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1'));
+      final all = await storage.loadAll();
+      expect(all, hasLength(1));
+      final m = all.first;
+      expect(m.id, 'm1');
+      expect(m.name, '布洛芬');
+      expect(m.expireDate, '2027-12-31');
+      expect(m.stock, 1);
+      expect(m.images, ['/img/a.png', '/img/b.png']);
+    });
+
+    test('update 按 id 更新字段', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1'));
+      final updated = makeMedicine('m1', name: '泰诺', stock: 5);
+      final result = await storage.update('m1', updated);
+      expect(result?.name, '泰诺');
+      final all = await storage.loadAll();
+      expect(all.first.name, '泰诺');
+      expect(all.first.stock, 5);
+    });
+
+    test('update 不存在的 id 返回 null', () async {
+      final storage = MedicineStorage();
+      final result = await storage.update('nope', makeMedicine('nope'));
+      expect(result, isNull);
+    });
+
+    test('delete 按 id 删除', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1'));
+      await storage.add(makeMedicine('m2'));
+      await storage.delete('m1');
+      final all = await storage.loadAll();
+      expect(all, hasLength(1));
+      expect(all.first.id, 'm2');
+    });
+
+    test('saveAll 全量替换', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1'));
+      await storage.saveAll([
+        makeMedicine('m2'),
+        makeMedicine('m3'),
+      ]);
+      final all = await storage.loadAll();
+      expect(all.map((m) => m.id).toSet(), {'m2', 'm3'});
+    });
+
+    test('自定义位置去重添加', () async {
+      final storage = MedicineStorage();
+      await storage.addCustomLocation('床头柜');
+      await storage.addCustomLocation('床头柜');
+      await storage.addCustomLocation(' 床头柜 ');
+      final list = await storage.loadCustomLocations();
+      expect(list, ['床头柜']);
+    });
+
+    test('clearAll 清空药品表', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1'));
+      await MedicineStorage.clearAll();
+      final all = await storage.loadAll();
+      expect(all, isEmpty);
+    });
+  });
+
+  group('MedicineStorage 旧数据迁移', () {
+    String encodeLegacy(List<Medicine> list) =>
+        jsonEncode(list.map((e) => e.toJson()).toList());
+
+    setUp(() {
+      // 清空 shared_preferences mock，模拟全新安装
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('首次 loadAll 从旧 shared_preferences 导入药品并清除旧数据', () async {
+      // 预置旧版 JSON 数据：仅含 image 单图字段
+      SharedPreferences.setMockInitialValues({
+        'medList': jsonEncode([
+          {'id': 'old2', 'name': '旧版单图药', 'expire_date': '2026-06-30', 'image': '/legacy/single.png'},
+        ]),
+      });
+
+      final storage = MedicineStorage();
+      final all = await storage.loadAll();
+
+      expect(all, hasLength(1));
+      expect(all.first.id, 'old2');
+      expect(all.first.name, '旧版单图药');
+      // images 兼容：单图字段迁移为 images[0]
+      expect(all.first.images, ['/legacy/single.png']);
+
+      // 迁移后旧数据应从 shared_preferences 清除
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.get('medList'), isNull);
+    });
+
+    test('首次 loadAll 迁移含多图数组的旧数据', () async {
+      SharedPreferences.setMockInitialValues({
+        'medList': encodeLegacy([
+          makeMedicine('m1', name: '多图药'),
+          makeMedicine('m2', name: '另一药'),
+        ]),
+      });
+
+      final storage = MedicineStorage();
+      final all = await storage.loadAll();
+      expect(all.map((m) => m.name).toSet(), {'多图药', '另一药'});
+      expect(all.firstWhere((m) => m.id == 'm1').images, ['/img/a.png', '/img/b.png']);
+    });
+
+    test('迁移的同时导入自定义位置列表', () async {
+      SharedPreferences.setMockInitialValues({
+        'customLocations': ['床头柜', '玄关柜'],
+      });
+
+      final storage = MedicineStorage();
+      final locations = await storage.loadCustomLocations();
+      expect(locations, ['床头柜', '玄关柜']);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.get('customLocations'), isNull);
+    });
+
+    test('迁移仅在首次触发，不会重复导入', () async {
+      SharedPreferences.setMockInitialValues({
+        'medList': encodeLegacy([makeMedicine('m1', name: '仅一次')]),
+      });
+
+      final storage = MedicineStorage();
+      // 第一次触发迁移
+      expect(await storage.loadAll(), hasLength(1));
+      // 清除 shared_preferences 后再次调用不应删除已导入的 SQLite 数据
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('medList');
+      expect(await storage.loadAll(), hasLength(1));
+    });
+  });
+}
