@@ -37,6 +37,11 @@ class _MedicineDetailPageState extends State<MedicineDetailPage> {
   late String _medType;
   List<String> _images = [];
 
+  // 编辑输入框的稳定 controller（避免每次 build 新建导致失焦）
+  final TextEditingController _nameCtl = TextEditingController();
+  final TextEditingController _specCtl = TextEditingController();
+  final TextEditingController _manufacturerCtl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +58,17 @@ class _MedicineDetailPageState extends State<MedicineDetailPage> {
     _barcode = m.barcode ?? '';
     _medType = m.medType ?? '';
     _images = List.of(m.images);
+    _nameCtl.text = _name;
+    _specCtl.text = _spec;
+    _manufacturerCtl.text = _manufacturer;
+  }
+
+  @override
+  void dispose() {
+    _nameCtl.dispose();
+    _specCtl.dispose();
+    _manufacturerCtl.dispose();
+    super.dispose();
   }
 
   void _setField(String field, String value) {
@@ -450,12 +466,25 @@ class _MedicineDetailPageState extends State<MedicineDetailPage> {
     );
   }
 
+  TextEditingController _fieldController(String field) {
+    switch (field) {
+      case 'name':
+        return _nameCtl;
+      case 'spec':
+        return _specCtl;
+      case 'manufacturer':
+        return _manufacturerCtl;
+      default:
+        return _nameCtl;
+    }
+  }
+
   Widget _editableField(String field, String value, {required bool textInput}) {
     if (!_editing) {
       return _valueText(value.isEmpty ? '-' : value);
     }
     return TextField(
-      controller: TextEditingController(text: value),
+      controller: _fieldController(field),
       enabled: _editing,
       style: const TextStyle(fontSize: 20, color: AppColors.brandText),
       decoration: const InputDecoration(

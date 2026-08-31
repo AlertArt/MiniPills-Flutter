@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:minipills_flutter/models/medicine.dart';
+import 'package:minipills_flutter/pages/add_medicine_page.dart';
 import 'package:minipills_flutter/pages/medication_list_page.dart';
 import 'package:minipills_flutter/services/database_helper.dart';
 import 'package:minipills_flutter/services/medicine_storage.dart';
@@ -173,5 +174,35 @@ void main() {
     final editable3 = tester.widget<EditableText>(find.byType(EditableText));
     expect(editable3.focusNode.hasFocus, isTrue,
         reason: '清空输入触发重建后仍应保持焦点');
+  });
+
+  testWidgets('添加药品页名称输入框输入/删除时保持焦点（失焦回归测试）', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: AddMedicinePage()));
+    await tester.pump();
+
+    // 定位药品名称输入框
+    final nameField = find.ancestor(
+      of: find.text('请输入药品名称'),
+      matching: find.byType(TextField),
+    );
+    expect(nameField, findsOneWidget);
+
+    // 聚焦并首次输入：onChanged -> setState（原 bug 场景）
+    await tester.enterText(nameField, '布洛芬');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final editable = tester.widget<EditableText>(
+        find.descendant(of: nameField, matching: find.byType(EditableText)));
+    expect(editable.focusNode.hasFocus, isTrue,
+        reason: '名称输入字符触发重建后不应失去焦点');
+
+    // 继续输入更多字符（多次 rebuild）
+    await tester.enterText(nameField, '布洛芬缓释片');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final editable2 = tester.widget<EditableText>(
+        find.descendant(of: nameField, matching: find.byType(EditableText)));
+    expect(editable2.focusNode.hasFocus, isTrue,
+        reason: '名称连续输入多次重建后仍应保持焦点');
   });
 }

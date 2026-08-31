@@ -51,12 +51,30 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
   bool _canSubmit = false;
   String _submitText = '请填写药品信息';
 
+  // 表单输入框的稳定 controller（避免每次 build 新建导致失焦）
+  final TextEditingController _nameCtl = TextEditingController();
+  final TextEditingController _specCtl = TextEditingController();
+  final TextEditingController _manufacturerCtl = TextEditingController();
+  final TextEditingController _barcodeCtl = TextEditingController();
+  final TextEditingController _stockCtl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _location = null;
+    _stockCtl.text = '$_stock';
     _initDatePicker();
     _updateSubmitState();
+  }
+
+  @override
+  void dispose() {
+    _nameCtl.dispose();
+    _specCtl.dispose();
+    _manufacturerCtl.dispose();
+    _barcodeCtl.dispose();
+    _stockCtl.dispose();
+    super.dispose();
   }
 
   void _initDatePicker() {
@@ -159,6 +177,9 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     );
     if (file == null) return;
     if (!mounted) return;
+    _nameCtl.clear();
+    _specCtl.clear();
+    _manufacturerCtl.clear();
     setState(() {
       _imagePreview = file.path;
       _images.add(file.path);
@@ -208,6 +229,9 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
         _expireDateDisplay =
             result.expireDate.length >= 7 ? result.expireDate.substring(0, 7) : result.expireDate;
       }
+      _nameCtl.text = result.name;
+      _specCtl.text = result.spec;
+      _manufacturerCtl.text = result.manufacturer;
       setState(() {
         _name = result.name;
         _spec = result.spec;
@@ -265,6 +289,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
   // ========== 库存 ==========
   void _onStockPreset(int n) {
+    _stockCtl.text = '$n';
     setState(() => _stock = n);
   }
 
@@ -367,12 +392,12 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
               title: '条形码',
               child: _buildBarcodeRow(),
             ),
-            _section('药品名称', _buildTextField(_name, '请输入药品名称', (v) {
+            _section('药品名称', _buildTextField(controller: _nameCtl, hint: '请输入药品名称', onChanged: (v) {
               _name = v;
               _updateSubmitState();
             })),
-            _section('规格', _buildTextField(_spec, 'AI 识别后自动填入', (v) => _spec = v)),
-            _section('生产厂家', _buildTextField(_manufacturer, 'AI 识别后自动填入', (v) => _manufacturer = v)),
+            _section('规格', _buildTextField(controller: _specCtl, hint: 'AI 识别后自动填入', onChanged: (v) => _spec = v)),
+            _section('生产厂家', _buildTextField(controller: _manufacturerCtl, hint: 'AI 识别后自动填入', onChanged: (v) => _manufacturer = v)),
             _section(
               '药品类型',
               _buildPickerField(
@@ -407,9 +432,13 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     );
   }
 
-  Widget _buildTextField(String value, String hint, ValueChanged<String> onChanged) {
+  Widget _buildTextField({
+    required TextEditingController controller,
+    String hint = '',
+    ValueChanged<String>? onChanged,
+  }) {
     return TextField(
-      controller: TextEditingController(text: value),
+      controller: controller,
       style: const TextStyle(fontSize: 16, color: AppColors.brandText),
       decoration: InputDecoration(
         hintText: hint,
@@ -638,7 +667,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
       children: [
         Expanded(
           child: TextField(
-            controller: TextEditingController(text: _barcode),
+            controller: _barcodeCtl,
             style: const TextStyle(fontSize: 16, color: AppColors.brandText),
             decoration: const InputDecoration(
               hintText: '请输入或扫描条形码',
@@ -676,7 +705,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: TextField(
-                    controller: TextEditingController(text: '$_stock'),
+                    controller: _stockCtl,
                     keyboardType: TextInputType.number,
                     onChanged: _onStockInput,
                     textAlign: TextAlign.center,
