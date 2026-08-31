@@ -139,4 +139,39 @@ void main() {
       expect(all.map((m) => m.name).toList(), ['维生素C']);
     });
   });
+
+  testWidgets('搜索框输入/删除时保持焦点（失焦回归测试）', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: MedicationListPage()));
+    await pumpUntilLoaded(tester);
+
+    // 聚焦搜索框
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // 输入文字：onChanged -> setState（原 bug 场景）
+    await tester.enterText(find.byType(TextField), '布洛芬');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editable.focusNode.hasFocus, isTrue,
+        reason: '输入文字触发 setState 重建后，搜索框不应失去焦点');
+
+    // 继续输入更多字符（多次 rebuild）
+    await tester.enterText(find.byType(TextField), '布洛芬缓释片');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final editable2 = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editable2.focusNode.hasFocus, isTrue,
+        reason: '连续输入多次重建后仍应保持焦点');
+
+    // 清空输入（删除按钮场景）
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final editable3 = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editable3.focusNode.hasFocus, isTrue,
+        reason: '清空输入触发重建后仍应保持焦点');
+  });
 }

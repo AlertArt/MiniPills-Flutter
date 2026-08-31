@@ -26,6 +26,7 @@ class _MedicationListPageState extends State<MedicationListPage> {
   bool _noticeHas = false;
   bool _loading = true;
 
+  final TextEditingController _searchController = TextEditingController();
   String _keyword = '';
   int _tabIndex = 0;
   List<String> _locationTabs = ['全部'];
@@ -51,6 +52,12 @@ class _MedicationListPageState extends State<MedicationListPage> {
       _loading = false;
       _applyFilter();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _applyFilter() {
@@ -87,6 +94,7 @@ class _MedicationListPageState extends State<MedicationListPage> {
   }
 
   void _onClearSearch() {
+    _searchController.clear();
     setState(() => _keyword = '');
     _applyFilter();
   }
@@ -331,6 +339,7 @@ class _MedicationListPageState extends State<MedicationListPage> {
             ),
             Expanded(
               child: TextField(
+                controller: _searchController,
                 onChanged: _onSearch,
                 onSubmitted: (_) => _applyFilter(),
                 textInputAction: TextInputAction.search,
