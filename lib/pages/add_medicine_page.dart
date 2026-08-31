@@ -10,6 +10,7 @@ import '../models/medicine.dart';
 import '../services/ai_recognize_service.dart';
 import '../services/medicine_storage.dart';
 import '../theme.dart';
+import 'barcode_scanner_page.dart';
 
 class AddMedicinePage extends StatefulWidget {
   const AddMedicinePage({super.key});
@@ -249,14 +250,14 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     }
   }
 
-  // ========== 条码扫描（Flutter 需插件；这里用输入占位） ==========
-  void _onScan() {
-    // 真实扫码需引入 mobile_scanner / barcode_scan 插件，此处保留输入方式。
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('请直接输入条形码（扫码功能需接入移动端扫码插件）'),
-      ),
+  // ========== 条码扫描（mobile_scanner） ==========
+  Future<void> _onScan() async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
     );
+    if (code == null || code.isEmpty || !mounted) return;
+    _barcodeCtl.text = code;
+    setState(() => _barcode = code);
   }
 
   // ========== 有效期选择 ==========

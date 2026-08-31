@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'pages/medication_list_page.dart';
+import 'services/medicine_storage.dart';
 import 'theme.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  MedicineStorage.initNotifications();
   runApp(const MiniPillsApp());
 }
 

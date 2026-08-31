@@ -1,11 +1,14 @@
 // 本地存储服务 —— 对应小程序 wx.getStorageSync('medList')
 // 使用 SQLite（sqflite）持久化，首次启动从旧 shared_preferences JSON 数据一次性迁移。
 
+import 'dart:async';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/medicine.dart';
 import 'database_helper.dart';
+import 'notification_service.dart';
 
 class MedicineStorage {
   static const String _legacyKey = 'medList';
@@ -122,6 +125,7 @@ class MedicineStorage {
       _db.medicineToRow(medicine),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    unawaited(_rescheduleNotifications());
   }
 
   /// 按 id 更新
@@ -135,6 +139,7 @@ class MedicineStorage {
       whereArgs: [id],
     );
     if (n == 0) return null;
+    unawaited(_rescheduleNotifications());
     return updated;
   }
 
@@ -147,6 +152,26 @@ class MedicineStorage {
       where: 'id = ?',
       whereArgs: [id],
     );
+    unawaited(_rescheduleNotifications());
+  }
+
+  /// 数据变更后异步重建到期提醒通知（不阻塞主流程）
+  Future<void> _rescheduleNotifications() async {
+    try {
+      final items = await loadAll();
+      await NotificationService.instance.rescheduleAll(items);
+    } catch (_) {
+      // 通知失败不影响数据操作
+    }
+  }
+
+  /// 启动时初始化通知服务并请求权限（含首次调度）
+  static Future<void> initNotifications() async {
+    final service = NotificationService.instance;
+    await service.init();
+    await service.requestPermissions();
+    final items = await MedicineStorage().loadAll();
+    await service.rescheduleAll(items);
   }
 
   static Future<void> clearAll() async {
