@@ -2,6 +2,7 @@
 // 使用 SQLite（sqflite）持久化，首次启动从旧 shared_preferences JSON 数据一次性迁移。
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -98,6 +99,39 @@ class MedicineStorage {
     return rows.map(_db.rowToMedicine).toList();
   }
 
+  /// SQL 下推查询：按存放位置 / 名称关键字过滤（WHERE 下推），降低内存过滤开销。
+  /// [location] 非空时过滤存放位置；[keyword] 非空时按名称模糊搜索。
+  /// 排序仍由上层按"到期阶段"进行，因此此处仅为过滤下推。
+  Future<List<Medicine>> queryMedicines({
+    String? location,
+    String? keyword,
+    String? expireBefore, // YYYY-MM-DD，仅返回到期日在此之前（含）的药品
+  }) async {
+    await _migrateIfNeeded();
+    final db = await _db.database;
+    final where = <String>[];
+    final args = <Object?>[];
+    if (location != null && location.isNotEmpty) {
+      where.add('location = ?');
+      args.add(location);
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      where.add('name LIKE ?');
+      args.add('%${keyword.trim()}%');
+    }
+    if (expireBefore != null && expireBefore.isNotEmpty) {
+      where.add('expire_date IS NOT NULL AND expire_date <= ?');
+      args.add(expireBefore);
+    }
+    final rows = await db.query(
+      DatabaseHelper.medicinesTable,
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'expire_date ASC',
+    );
+    return rows.map(_db.rowToMedicine).toList();
+  }
+
   /// 保存完整列表（全量替换：清空后重写）
   Future<void> saveAll(List<Medicine> list) async {
     await _migrateIfNeeded();
@@ -153,6 +187,70 @@ class MedicineStorage {
       whereArgs: [id],
     );
     unawaited(_rescheduleNotifications());
+  }
+
+  /// 导出 JSON 备份：包含全部药品与自定义位置
+  Future<String> exportBackup() async {
+    final items = await loadAll();
+    final custom = await loadCustomLocations();
+    return jsonEncode({
+      'version': 1,
+      'app': 'MiniPills',
+      'exported_at': DateTime.now().toIso8601String(),
+      'medicines': items.map((e) => e.toJson()).toList(),
+      'customLocations': custom,
+    });
+  }
+
+  /// 从 JSON 备份字符串恢复数据（全量替换已有药品与自定义位置）。
+  /// 返回 (药品数, 位置数)。
+  Future<({int medicines, int locations})> importBackup(String source) async {
+    final data = jsonDecode(source);
+    if (data is! Map) throw const FormatException('无效的备份文件格式');
+    final rawMeds = data['medicines'];
+    final rawLocs = data['customLocations'];
+    if (rawMeds is! List) throw const FormatException('备份缺少 medicines 字段');
+
+    await _migrateIfNeeded();
+    final medicines = <Medicine>[];
+    for (final e in rawMeds) {
+      if (e is Map) {
+        medicines.add(Medicine.fromJson(Map<String, dynamic>.from(e)));
+      }
+    }
+
+    final locations = <String>[];
+    if (rawLocs is List) {
+      for (final l in rawLocs) {
+        if (l is String && l.trim().isNotEmpty) {
+          locations.add(l.trim());
+        }
+      }
+    }
+
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      await txn.delete(DatabaseHelper.medicinesTable);
+      await txn.delete(DatabaseHelper.customLocationsTable);
+      final batch = txn.batch();
+      for (final m in medicines) {
+        batch.insert(
+          DatabaseHelper.medicinesTable,
+          _db.medicineToRow(m),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      for (final loc in locations) {
+        batch.insert(
+          DatabaseHelper.customLocationsTable,
+          {'name': loc},
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+      await batch.commit(noResult: true);
+    });
+    unawaited(_rescheduleNotifications());
+    return (medicines: medicines.length, locations: locations.length);
   }
 
   /// 数据变更后异步重建到期提醒通知（不阻塞主流程）

@@ -180,5 +180,67 @@ void main() {
       await prefs.remove('medList');
       expect(await storage.loadAll(), hasLength(1));
     });
+
+    test('exportBackup 生成包含药品与自定义位置的 JSON', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1', name: '布洛芬'));
+      await storage.add(makeMedicine('m2', name: '泰诺'));
+      await storage.addCustomLocation('床头柜');
+
+      final json = await storage.exportBackup();
+      final data = jsonDecode(json) as Map<String, dynamic>;
+      expect(data['version'], 1);
+      final meds = data['medicines'] as List;
+      expect(meds, hasLength(2));
+      expect((data['customLocations'] as List).toSet(), {'床头柜'});
+      // 药品保留完整字段
+      final first = meds.firstWhere((e) => (e as Map)['id'] == 'm1') as Map;
+      expect(first['name'], '布洛芬');
+      expect(first['images'], ['/img/a.png', '/img/b.png']);
+    });
+
+    test('importBackup 全量替换药品与自定义位置', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1', name: '旧药'));
+      await storage.addCustomLocation('旧位置');
+
+      final json = jsonEncode({
+        'version': 1,
+        'app': 'MiniPills',
+        'medicines': [
+          {
+            'id': 'n1',
+            'barcode': '111',
+            'name': '新药',
+            'expire_date': '2027-06-01',
+            'stock': 3,
+            'unit': '盒',
+            'location': '卧室抽屉',
+            'images': <String>[],
+          }
+        ],
+        'customLocations': ['玄关柜', '床头柜'],
+      });
+
+      final counts = await storage.importBackup(json);
+      expect(counts.medicines, 1);
+      expect(counts.locations, 2);
+
+      final all = await storage.loadAll();
+      expect(all, hasLength(1));
+      expect(all.first.name, '新药');
+      expect(await storage.loadCustomLocations(), containsAll(['玄关柜', '床头柜']));
+      // 旧数据不再存在
+      expect(all.map((m) => m.name), isNot(contains('旧药')));
+    });
+
+    test('importBackup 非法 JSON 抛出 FormatException 且不破坏已有数据', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1', name: '保留药'));
+
+      await expectLater(storage.importBackup('not json'), throwsFormatException);
+      expect(await storage.loadAll(), hasLength(1));
+      expect((await storage.loadAll()).first.name, '保留药');
+    });
   });
 }

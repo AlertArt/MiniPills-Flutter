@@ -4,23 +4,25 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/medicine.dart';
+import '../providers.dart';
 import '../services/ai_recognize_service.dart';
 import '../services/medicine_storage.dart';
 import '../theme.dart';
 import 'barcode_scanner_page.dart';
 
-class AddMedicinePage extends StatefulWidget {
+class AddMedicinePage extends ConsumerStatefulWidget {
   const AddMedicinePage({super.key});
 
   @override
-  State<AddMedicinePage> createState() => _AddMedicinePageState();
+  ConsumerState<AddMedicinePage> createState() => _AddMedicinePageState();
 }
 
-class _AddMedicinePageState extends State<AddMedicinePage> {
-  final MedicineStorage _storage = MedicineStorage();
+class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
+  MedicineStorage get _storage => ref.read(medicineRepositoryProvider);
   final AiRecognizeService _ai = AiRecognizeService();
   final ImagePicker _picker = ImagePicker();
 

@@ -4,24 +4,26 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/med_list.dart';
 import '../models/medicine.dart';
+import '../providers.dart';
 import '../services/medicine_storage.dart';
 import '../theme.dart';
 
-class MedicineDetailPage extends StatefulWidget {
+class MedicineDetailPage extends ConsumerStatefulWidget {
   final Medicine medicine;
   final bool editing;
   const MedicineDetailPage({super.key, required this.medicine, this.editing = false});
 
   @override
-  State<MedicineDetailPage> createState() => _MedicineDetailPageState();
+  ConsumerState<MedicineDetailPage> createState() => _MedicineDetailPageState();
 }
 
-class _MedicineDetailPageState extends State<MedicineDetailPage> {
-  final MedicineStorage _storage = MedicineStorage();
+class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
+  MedicineStorage get _storage => ref.read(medicineRepositoryProvider);
   final ImagePicker _picker = ImagePicker();
 
   late bool _editing;

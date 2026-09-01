@@ -1,25 +1,30 @@
 // 药品盘点列表页 —— 对应小程序 pages/med-list/med-list
 
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/med_list.dart';
 import '../models/medicine.dart';
+import '../providers.dart';
 import '../services/medicine_storage.dart';
 import '../theme.dart';
 import 'add_medicine_page.dart';
 import 'medicine_detail_page.dart';
 
-class MedicationListPage extends StatefulWidget {
+class MedicationListPage extends ConsumerStatefulWidget {
   const MedicationListPage({super.key});
 
   @override
-  State<MedicationListPage> createState() => _MedicationListPageState();
+  ConsumerState<MedicationListPage> createState() => _MedicationListPageState();
 }
 
-class _MedicationListPageState extends State<MedicationListPage> {
-  final MedicineStorage _storage = MedicineStorage();
+class _MedicationListPageState extends ConsumerState<MedicationListPage> {
+  MedicineStorage get _storage => ref.read(medicineRepositoryProvider);
 
   List<Medicine> _all = [];
   List<MedListItem> _list = [];
@@ -45,7 +50,13 @@ class _MedicationListPageState extends State<MedicationListPage> {
   }
 
   Future<void> _refresh() async {
-    final all = await _storage.loadAll();
+    // 从数据库加载并同步到全局 providers（含自定义位置）
+    List<Medicine> all;
+    try {
+      all = await _storage.loadAll();
+    } catch (_) {
+      all = ref.read(medicinesProvider);
+    }
     if (!mounted) return;
     setState(() {
       _all = all;
@@ -301,6 +312,132 @@ class _MedicationListPageState extends State<MedicationListPage> {
         .showSnackBar(SnackBar(content: Text('已清除 $expiredCount 种')));
   }
 
+  void _onBackupMenuTap() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _sheetItem(
+              icon: '⬆️',
+              text: '导出备份',
+              color: AppColors.brandBlue,
+              onTap: () {
+                Navigator.pop(ctx);
+                _exportBackup();
+              },
+            ),
+            _sheetItem(
+              icon: '⬇️',
+              text: '导入备份',
+              color: AppColors.brandMint,
+              onTap: () {
+                Navigator.pop(ctx);
+                _importBackup();
+              },
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1, color: AppColors.brandBorder),
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: const SizedBox(
+                height: 52,
+                child: Center(
+                  child: Text('取消',
+                      style: TextStyle(fontSize: 16, color: AppColors.brandTextSub)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportBackup() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final String json;
+    try {
+      json = await _storage.exportBackup();
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('导出失败')));
+      return;
+    }
+    try {
+      final uri = await FilePicker.saveFile(
+        dialogTitle: '保存备份',
+        fileName: 'minipills_backup_${DateTime.now().millisecondsSinceEpoch}.json',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: utf8.encode(json),
+      );
+      if (uri == null) return;
+      messenger.showSnackBar(SnackBar(content: Text('备份已保存到 ${uri.toFilePath()}')));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('导出失败')));
+    }
+  }
+
+  Future<void> _importBackup() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (result.isEmpty) return;
+    final path = result.first.path;
+    if (path == null) return;
+
+    final String content;
+    try {
+      content = File(path).readAsStringSync();
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('读取备份文件失败')));
+      return;
+    }
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认导入'),
+        content: const Text('导入将替换当前全部药品与存放位置，确定继续？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('导入', style: TextStyle(color: AppColors.brandDanger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final counts = await _storage.importBackup(content);
+      if (!mounted) return;
+      // 同步共享 providers 与位置标签页，使新增/变更立即可见
+      await refreshLocations(ref);
+      if (!mounted) return;
+      setState(() {
+        _locationTabs = ['全部', ...ref.read(locationsProvider)];
+      });
+      await refreshMedicines(ref);
+      if (!mounted) return;
+      _refresh();
+      messenger.showSnackBar(
+        SnackBar(content: Text('导入成功：药品 ${counts.medicines}，位置 ${counts.locations}')),
+      );
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('导入失败：备份文件无效')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -359,6 +496,14 @@ class _MedicationListPageState extends State<MedicationListPage> {
                   child: Text('✕', style: TextStyle(fontSize: 16, color: Color(0xFF999999))),
                 ),
               ),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: _onBackupMenuTap,
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Text('☰', style: TextStyle(fontSize: 20, color: AppColors.brandTextSub)),
+              ),
+            ),
           ],
         ),
       ),

@@ -1,6 +1,7 @@
 // 集成测试：storage(SQLite) + 页面 UI 的完整链路
 // 使用 tester.runAsync() 推进真实异步（SQLite），配合手动 pump 避免无限动画。
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -67,7 +68,7 @@ void main() {
       makeMedicine('a2', name: '维生素C', expireDate: '2027-01-15'),
     ]);
 
-    await tester.pumpWidget(const MaterialApp(home: MedicationListPage()));
+    await tester.pumpWidget(ProviderScope(child: const MaterialApp(home: MedicationListPage())));
     await pumpUntilLoaded(tester);
 
     expect(find.text('布洛芬'), findsOneWidget);
@@ -85,7 +86,7 @@ void main() {
       makeMedicine('a2', name: '维生素C'),
     ]);
 
-    await tester.pumpWidget(const MaterialApp(home: MedicationListPage()));
+    await tester.pumpWidget(ProviderScope(child: const MaterialApp(home: MedicationListPage())));
     await pumpUntilLoaded(tester);
 
     await tester.enterText(find.byType(TextField), '维生素');
@@ -102,7 +103,7 @@ void main() {
       makeMedicine('a2', name: '维生素C'),
     ]);
 
-    await tester.pumpWidget(const MaterialApp(home: MedicationListPage()));
+    await tester.pumpWidget(ProviderScope(child: const MaterialApp(home: MedicationListPage())));
     await pumpUntilLoaded(tester);
 
     expect(find.text('布洛芬'), findsOneWidget);
@@ -142,7 +143,7 @@ void main() {
   });
 
   testWidgets('搜索框输入/删除时保持焦点（失焦回归测试）', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: MedicationListPage()));
+    await tester.pumpWidget(ProviderScope(child: const MaterialApp(home: MedicationListPage())));
     await pumpUntilLoaded(tester);
 
     // 聚焦搜索框
@@ -177,7 +178,7 @@ void main() {
   });
 
   testWidgets('添加药品页名称输入框输入/删除时保持焦点（失焦回归测试）', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: AddMedicinePage()));
+    await tester.pumpWidget(ProviderScope(child: const MaterialApp(home: AddMedicinePage())));
     await tester.pump();
 
     // 定位药品名称输入框
