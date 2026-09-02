@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/medicine.dart';
 import '../providers.dart';
 import '../services/ai_recognize_service.dart';
+import '../services/barcode_lookup_service.dart';
 import '../services/medicine_storage.dart';
 import '../theme.dart';
 import 'barcode_scanner_page.dart';
@@ -276,10 +277,60 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
       _updateSubmitState();
       _showTraceDialog(hit);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已记录条码 $code，请补全药品信息')),
-      );
+      // 本地无既往录入，尝试联网追溯药品信息
+      await _lookupOnline(code);
     }
+  }
+
+  // 联网查询药品信息并自动回填；未配置/未命中时提示手动填写
+  Future<void> _lookupOnline(String code) async {
+    final lookup = ref.read(barcodeLookupProvider);
+    MedicineLookupResult res;
+    try {
+      res = await lookup.lookup(code);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未配置药品查询 API，已记录条码，请手动补全')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    if (!res.found || res.name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('未查到「$code」对应药品，请手动补全信息')),
+      );
+      return;
+    }
+    _nameCtl.text = res.name;
+    _specCtl.text = res.spec;
+    _manufacturerCtl.text = res.manufacturer;
+    setState(() {
+      _name = res.name;
+      _spec = res.spec;
+      _manufacturer = res.manufacturer;
+    });
+    _updateSubmitState();
+    _showOnlineResultDialog(res);
+  }
+
+  // 展示联网追溯结果
+  Future<void> _showOnlineResultDialog(MedicineLookupResult res) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('联网追溯结果'),
+        content: Text(
+          '已自动填入：\n名称：${res.name}\n品牌：${res.brand.isEmpty ? '无' : res.brand}\n厂家：${res.manufacturer.isEmpty ? '无' : res.manufacturer}\n规格：${res.spec.isEmpty ? '无' : res.spec}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
   }
 
   // 将追溯命中的既往信息回填到表单

@@ -5,11 +5,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models/medicine.dart';
+import 'services/barcode_lookup_service.dart';
 import 'services/medicine_storage.dart';
 
 /// 共享的 MedicineStorage 单例（内部使用 DatabaseHelper.instance，跨页共用）。
 final medicineRepositoryProvider = Provider<MedicineStorage>((ref) {
   return MedicineStorage();
+});
+
+/// 共享的条形码联网查询服务。
+final barcodeLookupProvider = Provider<BarcodeLookupService>((ref) {
+  return BarcodeLookupService();
 });
 
 /// 药品列表的响应式状态。

@@ -341,6 +341,15 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
                 _importBackup();
               },
             ),
+            _sheetItem(
+              icon: '🔗',
+              text: '药品查询 API 设置',
+              color: AppColors.brandTextSub,
+              onTap: () {
+                Navigator.pop(ctx);
+                _showLookupSettings();
+              },
+            ),
             const SizedBox(height: 8),
             const Divider(height: 1, color: AppColors.brandBorder),
             GestureDetector(
@@ -436,6 +445,70 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
     } catch (_) {
       messenger.showSnackBar(const SnackBar(content: Text('导入失败：备份文件无效')));
     }
+  }
+
+  // ===== 药品查询 API 设置（扫码联网追溯的数据源） =====
+  Future<void> _showLookupSettings() async {
+    final lookup = ref.read(barcodeLookupProvider);
+    final settings = await lookup.loadSettings();
+    if (!mounted) return;
+    final urlCtl = TextEditingController(text: settings.url);
+    final keyCtl = TextEditingController(text: settings.key);
+    final messenger = ScaffoldMessenger.of(context);
+    final configured = lookup.isConfigured(settings);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('药品查询 API 设置'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                configured
+                    ? '当前已配置，扫码联网追溯可用。'
+                    : '当前为占位地址，扫码联网追溯不可用；请填写真实查询接口。',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: configured ? AppColors.brandMint : AppColors.brandDanger,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: urlCtl,
+                decoration: const InputDecoration(
+                  labelText: '查询接口 URL',
+                  hintText: 'https://.../api/barcode-lookup',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: keyCtl,
+                decoration: const InputDecoration(
+                  labelText: 'API Key（可选）',
+                  hintText: '无则留空',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await lookup.saveSettings(url: urlCtl.text, key: keyCtl.text);
+              messenger.showSnackBar(const SnackBar(content: Text('已保存药品查询 API 设置')));
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
