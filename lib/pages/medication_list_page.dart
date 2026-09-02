@@ -325,7 +325,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
           children: [
             _sheetItem(
               icon: '⬆️',
-              text: '导出备份',
+              text: '备份',
               color: AppColors.brandBlue,
               onTap: () {
                 Navigator.pop(ctx);
@@ -334,7 +334,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
             ),
             _sheetItem(
               icon: '⬇️',
-              text: '导入备份',
+              text: '恢复',
               color: AppColors.brandMint,
               onTap: () {
                 Navigator.pop(ctx);

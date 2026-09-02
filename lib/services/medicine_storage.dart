@@ -132,6 +132,24 @@ class MedicineStorage {
     return rows.map(_db.rowToMedicine).toList();
   }
 
+  /// 按条形码精确查找药品（追溯复用：同一条码的既往录入）。
+  /// 返回最新录入的一条；未找到返回 null。
+  Future<Medicine?> findByBarcode(String barcode) async {
+    final code = barcode.trim();
+    if (code.isEmpty) return null;
+    await _migrateIfNeeded();
+    final db = await _db.database;
+    final rows = await db.query(
+      DatabaseHelper.medicinesTable,
+      where: 'barcode = ?',
+      whereArgs: [code],
+      orderBy: 'rowid DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _db.rowToMedicine(rows.first);
+  }
+
   /// 保存完整列表（全量替换：清空后重写）
   Future<void> saveAll(List<Medicine> list) async {
     await _migrateIfNeeded();

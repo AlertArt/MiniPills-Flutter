@@ -26,14 +26,15 @@ void main() {
     await DatabaseHelper.instance.reset();
   });
 
-  Medicine makeMedicine(String id, {String name = '布洛芬', int stock = 1}) {
+  Medicine makeMedicine(String id,
+      {String name = '布洛芬', int stock = 1, String? barcode, String? location, String? expireDate}) {
     return Medicine(
       id: id,
       name: name,
-      barcode: '6901234567890',
-      expireDate: '2027-12-31',
+      barcode: barcode ?? '6901234567890',
+      expireDate: expireDate ?? '2027-12-31',
       stock: stock,
-      location: '药箱（客厅）',
+      location: location ?? '药箱（客厅）',
       unit: '片',
       images: const ['/img/a.png', '/img/b.png'],
     );
@@ -106,6 +107,75 @@ void main() {
       await MedicineStorage.clearAll();
       final all = await storage.loadAll();
       expect(all, isEmpty);
+    });
+
+    test('queryMedicines 按 location 精确过滤', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1', name: '药A', location: '冰箱'));
+      await storage.add(makeMedicine('m2', name: '药B', location: '药箱（客厅）'));
+      final r = await storage.queryMedicines(location: '冰箱');
+      expect(r.map((m) => m.id), ['m1']);
+    });
+
+    test('queryMedicines 按 keyword 模糊搜索名称', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1', name: '布洛芬缓释片'));
+      await storage.add(makeMedicine('m2', name: '泰诺林'));
+      final r = await storage.queryMedicines(keyword: '布洛芬');
+      expect(r.map((m) => m.id), ['m1']);
+    });
+
+    test('queryMedicines 按 expireBefore 过滤到期早于指定日', () async {
+      final storage = MedicineStorage();
+      await storage.add(Medicine(
+          id: 'm1',
+          name: '快到期',
+          expireDate: '2026-01-20',
+          barcode: '111'));
+      await storage.add(Medicine(
+          id: 'm2',
+          name: '较晚',
+          expireDate: '2027-12-31',
+          barcode: '222'));
+      final r = await storage.queryMedicines(expireBefore: '2026-03-01');
+      expect(r.map((m) => m.id), ['m1']);
+    });
+
+    test('queryMedicines 组合条件且按到期日升序', () async {
+      final storage = MedicineStorage();
+      await storage.add(Medicine(
+          id: 'm1', name: '药X', location: '冰箱', expireDate: '2026-06-01', barcode: '001'));
+      await storage.add(Medicine(
+          id: 'm2', name: '药X', location: '药箱（客厅）', expireDate: '2026-03-01', barcode: '002'));
+      final r = await storage.queryMedicines(location: '冰箱', keyword: '药X');
+      expect(r.map((m) => m.id), ['m1']);
+    });
+
+    test('queryMedicines 无筛选项时不生效额外 WHERE', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1'));
+      await storage.add(makeMedicine('m2'));
+      final r = await storage.queryMedicines();
+      expect(r, hasLength(2));
+    });
+
+    test('findByBarcode 命中既往录入', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1', name: '布洛芬', barcode: '6901234567890'));
+      final hit = await storage.findByBarcode('6901234567890');
+      expect(hit?.id, 'm1');
+      expect(hit?.name, '布洛芬');
+    });
+
+    test('findByBarcode 未命中返回 null', () async {
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1', name: '布洛芬', barcode: '111'));
+      expect(await storage.findByBarcode('999'), isNull);
+    });
+
+    test('findByBarcode 空条码返回 null', () async {
+      final storage = MedicineStorage();
+      expect(await storage.findByBarcode('   '), isNull);
     });
   });
 

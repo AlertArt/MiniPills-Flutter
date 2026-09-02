@@ -258,8 +258,73 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
       MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
     );
     if (code == null || code.isEmpty || !mounted) return;
-    _barcodeCtl.text = code;
-    setState(() => _barcode = code);
+    setState(() {
+      _barcodeCtl.text = code;
+      _barcode = code;
+    });
+    // 自动追溯：同一条码的既往录入可直接复用名称/规格/厂家/单位
+    Medicine? existing;
+    try {
+      existing = await _storage.findByBarcode(code);
+    } catch (_) {
+      existing = null;
+    }
+    if (!mounted) return;
+    final hit = existing;
+    if (hit != null) {
+      _applyTrace(hit);
+      _updateSubmitState();
+      _showTraceDialog(hit);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已记录条码 $code，请补全药品信息')),
+      );
+    }
+  }
+
+  // 将追溯命中的既往信息回填到表单
+  void _applyTrace(Medicine hit) {
+    _nameCtl.text = hit.name;
+    _specCtl.text = hit.spec ?? '';
+    _manufacturerCtl.text = hit.manufacturer ?? '';
+    if ((hit.unit ?? '').isNotEmpty) {
+      _stockUnits = [hit.unit!, ..._stockUnits.where((u) => u != hit.unit)];
+      _stockUnit = hit.unit!;
+    }
+    setState(() {
+      _name = hit.name;
+      _spec = hit.spec ?? '';
+      _manufacturer = hit.manufacturer ?? '';
+    });
+  }
+
+  // 扫码命中既往录入时，询问是否复用并自动递增库存
+  Future<void> _showTraceDialog(Medicine existing) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('追溯命中'),
+        content: Text(
+          '已找到同条码「${existing.name}」\n规格：${existing.spec ?? '无'}\n厂家：${existing.manufacturer ?? '无'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'increment'),
+            child: const Text('自动+1库存'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'fill'),
+            child: const Text('仅填入信息'),
+          ),
+        ],
+      ),
+    );
+    if (action == 'increment') {
+      setState(() {
+        _stock = _stock + 1;
+        _stockCtl.text = '$_stock';
+      });
+    }
   }
 
   // ========== 有效期选择 ==========
