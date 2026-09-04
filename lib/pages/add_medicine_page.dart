@@ -1121,7 +1121,7 @@ class _SimplePickerState extends State<_SimplePicker> {
             child: ListWheelScrollView.useDelegate(
               itemExtent: 44,
               physics: const FixedExtentScrollPhysics(),
-              onSelectedItemChanged: (i) => _sel = i,
+              onSelectedItemChanged: (i) => setState(() => _sel = i),
               childDelegate: ListWheelChildBuilderDelegate(
                 childCount: displayItems.length,
                 builder: (context, i) => Center(
@@ -1186,12 +1186,16 @@ class _YearMonthPickerState extends State<_YearMonthPicker> {
                   child: ListWheelScrollView.useDelegate(
                     itemExtent: 44,
                     physics: const FixedExtentScrollPhysics(),
-                    onSelectedItemChanged: (i) => _yearIdx = i,
+                    onSelectedItemChanged: (i) => setState(() => _yearIdx = i),
                     childDelegate: ListWheelChildBuilderDelegate(
                       childCount: widget.years.length,
                       builder: (context, i) => Center(
                         child: Text('${widget.years[i]}年',
-                            style: const TextStyle(fontSize: 20, color: AppColors.brandText)),
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: i == _yearIdx ? FontWeight.w600 : FontWeight.w400,
+                              color: i == _yearIdx ? AppColors.brandBlue : const Color(0xFF8A9BAD),
+                            )),
                       ),
                     ),
                   ),
@@ -1200,12 +1204,16 @@ class _YearMonthPickerState extends State<_YearMonthPicker> {
                   child: ListWheelScrollView.useDelegate(
                     itemExtent: 44,
                     physics: const FixedExtentScrollPhysics(),
-                    onSelectedItemChanged: (i) => _monthIdx = i,
+                    onSelectedItemChanged: (i) => setState(() => _monthIdx = i),
                     childDelegate: ListWheelChildBuilderDelegate(
                       childCount: widget.months.length,
                       builder: (context, i) => Center(
                         child: Text('${widget.months[i]}月',
-                            style: const TextStyle(fontSize: 20, color: AppColors.brandText)),
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: i == _monthIdx ? FontWeight.w600 : FontWeight.w400,
+                              color: i == _monthIdx ? AppColors.brandBlue : const Color(0xFF8A9BAD),
+                            )),
                       ),
                     ),
                   ),
