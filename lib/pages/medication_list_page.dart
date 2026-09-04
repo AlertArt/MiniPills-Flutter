@@ -13,6 +13,7 @@ import '../models/medicine.dart';
 import '../providers.dart';
 import '../services/medicine_storage.dart';
 import '../theme.dart';
+import 'about_page.dart';
 import 'add_medicine_page.dart';
 import 'medicine_detail_page.dart';
 
@@ -348,6 +349,16 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
               onTap: () {
                 Navigator.pop(ctx);
                 _showLookupSettings();
+              },
+            ),
+            _sheetItem(
+              icon: 'ℹ️',
+              text: '关于',
+              color: AppColors.brandTextSub,
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const AboutPage()));
               },
             ),
             const SizedBox(height: 8),

@@ -913,9 +913,16 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
             onChanged: (v) => _barcode = v,
           ),
         ),
-        TextButton(
+        TextButton.icon(
           onPressed: _onScan,
-          child: const Text('扫码', style: TextStyle(fontSize: 14, color: Colors.white)),
+          icon: const Icon(Icons.qr_code_scanner, size: 18, color: Colors.white),
+          label: const Text('扫码', style: TextStyle(fontSize: 15, color: Colors.white)),
+          style: TextButton.styleFrom(
+            backgroundColor: AppColors.brandBlue,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
         ),
       ],
     );
