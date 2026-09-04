@@ -17,10 +17,11 @@ class DatabaseHelper {
   static DatabaseHelper get instance => _instance;
 
   static const String _dbName = 'minipills.db';
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
 
   static const String medicinesTable = 'medicines';
   static const String customLocationsTable = 'custom_locations';
+  static const String customTypesTable = 'custom_types';
 
   Database? _db;
 
@@ -78,10 +79,25 @@ class DatabaseHelper {
         name TEXT NOT NULL UNIQUE
       )
     ''');
+    await db.execute('''
+      CREATE TABLE $customTypesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        units TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // 预留升级钩子
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $customTypesTable (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          units TEXT NOT NULL
+        )
+      ''');
+    }
   }
 
   /// 将 Medicine 写入行数据（images 存为 JSON 字符串）

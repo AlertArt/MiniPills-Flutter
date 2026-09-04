@@ -468,8 +468,8 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
             children: [
               Text(
                 configured
-                    ? '当前已配置，扫码联网追溯可用。'
-                    : '当前为占位地址，扫码联网追溯不可用；请填写真实查询接口。',
+                      ? '当前已配置，扫码联网追溯可用（免费接口每日次数有限）。'
+                      : '当前未配置有效查询接口，扫码联网追溯不可用；请填写真实接口。',
                 style: TextStyle(
                   fontSize: 13,
                   color: configured ? AppColors.brandMint : AppColors.brandDanger,

@@ -88,6 +88,66 @@ class MedicineStorage {
     );
   }
 
+  /// 读取全部自定义药品类型（类型名 + 对应单位列表）
+  Future<List<CustomType>> loadCustomTypes() async {
+    await _migrateIfNeeded();
+    final db = await _db.database;
+    final rows = await db.query(
+      DatabaseHelper.customTypesTable,
+      orderBy: 'id ASC',
+    );
+    final result = <CustomType>[];
+    for (final row in rows) {
+      final name = (row['name'] as String?)?.trim() ?? '';
+      if (name.isEmpty) continue;
+      List<String> units = [];
+      final unitsRaw = row['units'] as String?;
+      if (unitsRaw != null && unitsRaw.isNotEmpty) {
+        try {
+          units = List<String>.from(jsonDecode(unitsRaw) as List)
+              .map((e) => (e as String?)?.trim() ?? '')
+              .where((e) => e.isNotEmpty)
+              .toList();
+        } catch (_) {
+          units = [];
+        }
+      }
+      result.add(CustomType(name: name, units: units));
+    }
+    return result;
+  }
+
+  /// 新增自定义药品类型。类型名重复时忽略；[units] 为空则回退 ['片']。
+  Future<void> addCustomType(String name, List<String> units) async {
+    final t = name.trim();
+    if (t.isEmpty) return;
+    final cleanUnits = (units.isEmpty ? ['片'] : units)
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (cleanUnits.isEmpty) {
+      cleanUnits.add('片');
+    }
+    await _migrateIfNeeded();
+    final db = await _db.database;
+    await db.insert(
+      DatabaseHelper.customTypesTable,
+      {'name': t, 'units': jsonEncode(cleanUnits)},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  /// 删除自定义药品类型
+  Future<void> deleteCustomType(String name) async {
+    await _migrateIfNeeded();
+    final db = await _db.database;
+    await db.delete(
+      DatabaseHelper.customTypesTable,
+      where: 'name = ?',
+      whereArgs: [name],
+    );
+  }
+
   /// 读取药品列表
   Future<List<Medicine>> loadAll() async {
     await _migrateIfNeeded();

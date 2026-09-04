@@ -99,7 +99,82 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
   // ========== 药品类型选择 ==========
   int _typeSel = 0;
 
+  Future<List<CustomType>> _loadCustomTypes() async {
+    try {
+      return await _storage.loadCustomTypes();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _createCustomType() async {
+    final nameCtl = TextEditingController();
+    final unitsCtl = TextEditingController();
+    final messenger = ScaffoldMessenger.of(context);
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('新建自定义类型'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtl,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: '类型名称', hintText: '例如：膏药'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: unitsCtl,
+              decoration: const InputDecoration(
+                labelText: '数量单位（逗号分隔）',
+                hintText: '例如：张,盒',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, '${nameCtl.text.trim()}|${unitsCtl.text.trim()}'),
+            child: const Text('保存', style: TextStyle(color: AppColors.brandBlue)),
+          ),
+        ],
+      ),
+    );
+    if (text == null) return;
+    final parts = text.split('|');
+    final name = parts.isNotEmpty ? parts[0].trim() : '';
+    final units = parts.length > 1 && parts[1].isNotEmpty
+        ? parts[1].split(RegExp(r'[,，]')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
+        : const <String>['片'];
+    if (name.isEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text('类型名称不能为空')));
+      return;
+    }
+    try {
+      await _storage.addCustomType(name, units);
+      if (!mounted) return;
+      setState(() {
+        _medType = name;
+        _stockUnits = units;
+        _stockUnit = units.first;
+      });
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('保存失败：该类型可能已存在')));
+    }
+  }
+
   Future<void> _showTypePicker() async {
+    final customTypes = await _loadCustomTypes();
+    for (final ct in customTypes) {
+      if (ct.name == _medType) {
+        _typeSel = AddMedicineLogic.medTypes.length +
+            customTypes.indexWhere((e) => e.name == ct.name);
+      }
+    }
+    if (!mounted) return;
+    final types = AddMedicineLogic.getTypes(custom: customTypes);
     final sel = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
@@ -108,17 +183,23 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
       ),
       builder: (ctx) => _SimplePicker(
         title: '选择药品类型',
-        initial: _typeSel,
-        items: AddMedicineLogic.medTypes,
+        initial: AddMedicineLogic.medTypes.contains(_medType)
+            ? _typeSel
+            : customTypes.indexWhere((e) => e.name == _medType),
+        items: types,
+        allowCustom: true,
+        customLabel: '自定义类型…',
       ),
     );
     if (sel == null) return;
-    final idx = AddMedicineLogic.medTypes.indexOf(sel);
-    final type = sel;
-    final units = AddMedicineLogic.typeUnits[type] ?? ['片'];
+    if (sel == _SimplePicker.customSentinel) {
+      await _createCustomType();
+      return;
+    }
+    final units = AddMedicineLogic.getTypeUnits(sel, custom: customTypes);
     setState(() {
-      _typeSel = idx < 0 ? 0 : idx;
-      _medType = type;
+      _typeSel = AddMedicineLogic.getTypes(custom: customTypes).indexOf(sel);
+      _medType = sel;
       _stockUnits = units;
       _stockUnit = units.first;
     });
@@ -440,9 +521,19 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
         initial: _locSel,
         items: locs,
         allowCustom: true,
+        customLabel: '自定义位置…',
       ),
     );
     if (result == null) return;
+    if (result == _SimplePicker.customSentinel) {
+      await _createCustomLocation();
+      if (!mounted) return;
+      final updated = AddMedicineLogic.getLocations(custom: await _loadCustomLocations());
+      setState(() {
+        _locSel = updated.contains(_location ?? '') ? updated.indexOf(_location ?? '') : 0;
+      });
+      return;
+    }
     setState(() {
       _locSel = locs.indexOf(result);
       if (_locSel == -1) _locSel = 0;
@@ -450,6 +541,31 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
     });
     // 记忆自定义位置
     await _storage.addCustomLocation(result);
+  }
+
+  Future<void> _createCustomLocation() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('输入自定义位置'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '例如：床头柜'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('确定', style: TextStyle(color: AppColors.brandBlue)),
+          ),
+        ],
+      ),
+    );
+    if (text == null || text.isEmpty) return;
+    setState(() => _location = text);
+    await _storage.addCustomLocation(text);
   }
 
   // ========== 提交 ==========
@@ -949,15 +1065,20 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
 
 /// 简单选择器（用于类型 / 存放位置）
 class _SimplePicker extends StatefulWidget {
+  /// 选择「自定义…」时返回的特殊哨兵值
+  static const String customSentinel = '\u0001__CUSTOM__\u0001';
+
   final String title;
   final int initial;
   final List<String> items;
   final bool allowCustom;
+  final String? customLabel;
   const _SimplePicker({
     required this.title,
     required this.initial,
     required this.items,
     this.allowCustom = false,
+    this.customLabel,
   });
 
   @override
@@ -967,7 +1088,7 @@ class _SimplePicker extends StatefulWidget {
 class _SimplePickerState extends State<_SimplePicker> {
   late int _sel;
 
-  // 自定义位置的虚拟索引（放在 items 末尾）
+  // 自定义选项的虚拟索引（放在 items 末尾）
   int get _customIdx => widget.items.length;
 
   @override
@@ -978,28 +1099,7 @@ class _SimplePickerState extends State<_SimplePicker> {
 
   Future<void> _confirm() async {
     if (_sel == _customIdx && widget.allowCustom) {
-      final controller = TextEditingController();
-      final text = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('输入自定义位置'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: '例如：床头柜'),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('确定', style: TextStyle(color: AppColors.brandBlue)),
-            ),
-          ],
-        ),
-      );
-      if (text == null || text.isEmpty) return;
-      if (!mounted) return;
-      Navigator.pop(context, text);
+      Navigator.pop(context, _SimplePicker.customSentinel);
       return;
     }
     if (!mounted) return;
@@ -1009,7 +1109,7 @@ class _SimplePickerState extends State<_SimplePicker> {
   @override
   Widget build(BuildContext context) {
     final displayItems = widget.allowCustom
-        ? <String>[...widget.items, '自定义位置…']
+        ? <String>[...widget.items, widget.customLabel ?? '自定义位置…']
         : widget.items;
     return SafeArea(
       child: Column(

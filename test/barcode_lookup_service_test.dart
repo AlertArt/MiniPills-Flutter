@@ -7,7 +7,6 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:minipills_flutter/services/barcode_lookup_service.dart';
-import 'package:minipills_flutter/services/api_config.dart';
 
 void main() {
   final mockFound = MockClient((request) async {
@@ -64,8 +63,11 @@ void main() {
 
     test('未配置有效数据源时抛出 StateError', () async {
       final svc = BarcodeLookupService(client: mockFound);
-      // 默认 ApiConfig 为占位地址
-      final settings = const LookupSettings(url: ApiConfig.barcodeLookupUrl, key: '');
+      // 占位地址视为未配置
+      final settings = const LookupSettings(
+        url: 'https://your-medicine-lookup.example.com/api/barcode-lookup',
+        key: '',
+      );
       expect(
         () => svc.lookup('6921168509256', settingsOverride: settings),
         throwsStateError,
@@ -101,10 +103,15 @@ void main() {
       expect(settings.key, 'secret-key');
     });
 
-    test('isConfigured 判断占位地址为未配置', () async {
+    test('isConfigured 判断占位地址为未配置，默认真实接口为已配置', () async {
       final svc = BarcodeLookupService(client: mockFound);
       expect(
-        svc.isConfigured(const LookupSettings(url: ApiConfig.barcodeLookupUrl, key: '')),
+        svc.isConfigured(
+          const LookupSettings(
+            url: 'https://your-medicine-lookup.example.com/api/barcode-lookup',
+            key: '',
+          ),
+        ),
         isFalse,
       );
       expect(

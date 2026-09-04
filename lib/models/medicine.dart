@@ -112,6 +112,21 @@ class Medicine {
   }
 }
 
+/// 自定义药品类型：类型名 + 对应的可选单位（数量单位）
+class CustomType {
+  final String name;
+  final List<String> units;
+
+  const CustomType({required this.name, required this.units});
+
+  factory CustomType.fromMap(Map<String, dynamic> map) => CustomType(
+        name: (map['name'] as String?) ?? '',
+        units: map['units'] is List ? List<String>.from(map['units'] as List) : const [],
+      );
+
+  Map<String, dynamic> toMap() => {'name': name, 'units': units};
+}
+
 /// add-medicine 页面常量与纯业务方法
 class AddMedicineLogic {
   static const List<String> medTypes = [
@@ -131,6 +146,33 @@ class AddMedicineLogic {
     '贴剂': ['贴'],
     '栓剂': ['枚'],
   };
+
+  /// 获取类型候选：默认类型 + 用户自定义类型名（去重）
+  static List<String> getTypes({List<CustomType> custom = const []}) {
+    final result = <String>[...medTypes];
+    for (final ct in custom) {
+      final t = ct.name.trim();
+      if (t.isNotEmpty && !result.contains(t)) {
+        result.add(t);
+      }
+    }
+    return result;
+  }
+
+  /// 获取某类型对应的可选单位：优先自定义类型，其次默认映射，最后回退 ['片']。
+  static List<String> getTypeUnits(
+    String type, {
+    List<CustomType> custom = const [],
+  }) {
+    for (final ct in custom) {
+      if (ct.name == type && ct.units.isNotEmpty) {
+        return List<String>.from(ct.units);
+      }
+    }
+    return typeUnits[type]?.isNotEmpty == true
+        ? List<String>.from(typeUnits[type]!)
+        : ['片'];
+  }
 
   /// 默认位置列表
   static const List<String> defaultLocations = [

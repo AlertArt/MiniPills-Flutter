@@ -313,4 +313,69 @@ void main() {
       expect((await storage.loadAll()).first.name, '保留药');
     });
   });
+
+  group('自定义药品类型', () {
+    test('addCustomType 后可 loadCustomTypes 读回（含单位）', () async {
+      final storage = MedicineStorage();
+      await storage.addCustomType('膏药', ['张', '盒']);
+      await storage.addCustomType('中药饮片', ['g', '包']);
+      final types = await storage.loadCustomTypes();
+      expect(types, hasLength(2));
+      final paste = types.firstWhere((t) => t.name == '膏药');
+      expect(paste.units, ['张', '盒']);
+      final herb = types.firstWhere((t) => t.name == '中药饮片');
+      expect(herb.units, ['g', '包']);
+    });
+
+    test('单位缺失或为空时回退为 [片]', () async {
+      final storage = MedicineStorage();
+      await storage.addCustomType('膏药', <String>[]);
+      final types = await storage.loadCustomTypes();
+      expect(types.first.units, ['片']);
+    });
+
+    test('同名类型重复添加被忽略', () async {
+      final storage = MedicineStorage();
+      await storage.addCustomType('膏药', ['张']);
+      await storage.addCustomType('膏药', ['盒']);
+      expect(await storage.loadCustomTypes(), hasLength(1));
+    });
+
+    test('deleteCustomType 可删除指定类型', () async {
+      final storage = MedicineStorage();
+      await storage.addCustomType('膏药', ['张']);
+      await storage.addCustomType('中药饮片', ['g']);
+      await storage.deleteCustomType('膏药');
+      final types = await storage.loadCustomTypes();
+      expect(types.map((t) => t.name), isNot(contains('膏药')));
+      expect(types, hasLength(1));
+    });
+  });
+
+  group('AddMedicineLogic 自定义类型逻辑', () {
+    test('getTypes 合并默认类型与自定义类型（去重）', () {
+      const custom = <CustomType>[
+        CustomType(name: '膏药', units: ['张']),
+        CustomType(name: '药片', units: ['盒']),
+        CustomType(name: '  ', units: ['x']),
+      ];
+      final types = AddMedicineLogic.getTypes(custom: custom);
+      expect(types, contains('膏药'));
+      // 自定义里与默认重名的"药片"不重复出现
+      expect(types.where((t) => t == '药片'), hasLength(1));
+      // 空名自定义被排除
+      expect(types, isNot(contains('  ')));
+    });
+
+    test('getTypeUnits 优先返回自定义类型单位，其次默认映射，最后回退 [片]', () {
+      const custom = <CustomType>[
+        CustomType(name: '膏药', units: ['张', '盒']),
+        CustomType(name: '胶囊', units: ['板']),
+      ];
+      expect(AddMedicineLogic.getTypeUnits('膏药', custom: custom), ['张', '盒']);
+      expect(AddMedicineLogic.getTypeUnits('胶囊', custom: custom), ['板']);
+      expect(AddMedicineLogic.getTypeUnits('口服液', custom: custom), ['瓶', 'ml']);
+      expect(AddMedicineLogic.getTypeUnits('不存在类型', custom: custom), ['片']);
+    });
+  });
 }
