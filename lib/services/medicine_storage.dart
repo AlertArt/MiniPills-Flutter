@@ -1,9 +1,14 @@
 // 本地存储服务 —— 对应小程序 wx.getStorageSync('medList')
 // 使用 SQLite（sqflite）持久化，首次启动从旧 shared_preferences JSON 数据一次性迁移。
+// 每次数据变更自动生成 JSON 自动备份（防误删/损坏），启动时做完整性检查并自动兜底恢复。
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -16,6 +21,16 @@ class MedicineStorage {
 
   /// 自定义存放位置列表的存储 key（旧 shared_preferences 数据）
   static const String _customLocationsKey = 'customLocations';
+
+  /// 自动备份存放目录名（位于应用文档目录下）
+  static const String _autoBackupDirName = 'auto_backups';
+
+  /// 自动备份保留数量上限（超出清理最旧的）
+  static const int _maxAutoBackups = 12;
+
+  /// 测试可注入的自动备份目录（为空时使用应用文档目录）
+  @visibleForTesting
+  static String? autoBackupDirOverride;
 
   final DatabaseHelper _db = DatabaseHelper.instance;
 
@@ -215,7 +230,7 @@ class MedicineStorage {
       }
       await batch.commit(noResult: true);
     });
-    unawaited(_rescheduleNotifications());
+    _afterChange();
   }
 
   /// 新增药品
@@ -227,7 +242,7 @@ class MedicineStorage {
       _db.medicineToRow(medicine),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    unawaited(_rescheduleNotifications());
+    _afterChange();
   }
 
   /// 按 id 更新
@@ -241,7 +256,7 @@ class MedicineStorage {
       whereArgs: [id],
     );
     if (n == 0) return null;
-    unawaited(_rescheduleNotifications());
+    _afterChange();
     return updated;
   }
 
@@ -254,7 +269,7 @@ class MedicineStorage {
       where: 'id = ?',
       whereArgs: [id],
     );
-    unawaited(_rescheduleNotifications());
+    _afterChange();
   }
 
   /// 导出 JSON 备份：包含全部药品、自定义位置与自定义类型
@@ -340,7 +355,7 @@ class MedicineStorage {
       }
       await batch.commit(noResult: true);
     });
-    unawaited(_rescheduleNotifications());
+    _afterChange();
     return (
       medicines: medicines.length,
       locations: locations.length,
@@ -389,6 +404,117 @@ class MedicineStorage {
         whereArgs: [name],
       );
     });
+  }
+
+  /// 数据变更后的统一收尾：异步重建到期提醒 + 异步生成自动备份（均不阻塞主流程）
+  void _afterChange() {
+    unawaited(_rescheduleNotifications());
+    unawaited(_autoBackupNow());
+  }
+
+  /// 立即执行一次自动备份（内部由数据变更自动触发，公开供测试/手动调用）。
+  /// 生成 JSON 备份到自动备份目录，并清理超出上限的旧备份。失败静默忽略。
+  Future<void> autoBackupNow() => _autoBackupNow();
+
+  Future<void> _autoBackupNow() async {
+    try {
+      final dir = await _autoBackupDir();
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final files = dir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.json'))
+          .toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
+      while (files.length >= _maxAutoBackups) {
+        try {
+          await files.removeAt(0).delete();
+        } catch (_) {}
+      }
+      final json = await exportBackup();
+      final target = File(p.join(dir.path, _autoBackupFileName(DateTime.now())));
+      await target.writeAsString(json, flush: true);
+    } catch (_) {
+      // 自动备份失败不影响主流程
+    }
+  }
+
+  static String _autoBackupFileName(DateTime now) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    String three(int v) => v.toString().padLeft(3, '0');
+    return 'minipills_auto_${now.year}${two(now.month)}${two(now.day)}_'
+        '${two(now.hour)}${two(now.minute)}${two(now.second)}_'
+        '${three(now.millisecond)}.json';
+  }
+
+  static Future<Directory> _autoBackupDir() async {
+    final override = autoBackupDirOverride;
+    if (override != null && override.isNotEmpty) {
+      return Directory(override);
+    }
+    final docs = await getApplicationDocumentsDirectory();
+    return Directory(p.join(docs.path, _autoBackupDirName));
+  }
+
+  /// 最新一份自动备份的文件路径（按文件名时间戳倒序取最新）；无则返回 null。
+  static Future<String?> _latestAutoBackupPath() async {
+    try {
+      final dir = await _autoBackupDir();
+      if (!await dir.exists()) return null;
+      final files = dir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.json'))
+          .toList()
+        ..sort((a, b) => b.path.compareTo(a.path));
+      if (files.isEmpty) return null;
+      return files.first.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 启动时数据安全兜底：检测数据库完整性，损坏则保留损坏文件、从最近自动备份恢复。
+  /// 返回整体是否处理完成（不抛错）；未损坏时直接返回 true。
+  static Future<bool> runIntegrityCheckAndRepair() async {
+    final helper = DatabaseHelper.instance;
+    try {
+      final db = await helper.database;
+      final rows = await db.rawQuery('PRAGMA quick_check');
+      final ok = rows.isNotEmpty && '${rows.first.values.first}' == 'ok';
+      if (ok) return true;
+    } catch (_) {
+      // 打开失败也视为损坏，进入修复
+    }
+    return _repairCorruptDatabase(helper);
+  }
+
+  static Future<bool> _repairCorruptDatabase(DatabaseHelper helper) async {
+    try {
+      await helper.forceClose();
+      final path = await helper.filePath();
+      if (path != ':memory:' && path.isNotEmpty) {
+        final file = File(path);
+        if (await file.exists()) {
+          final corruptPath =
+              '$path.corrupt.${DateTime.now().millisecondsSinceEpoch}.db';
+          await file.rename(corruptPath); // 保留损坏文件便于取证，再重建新库
+        }
+      }
+      final latest = await _latestAutoBackupPath();
+      if (latest != null) {
+        final src = await File(latest).readAsString();
+        await MedicineStorage().importBackup(src);
+      } else {
+        // 无自动备份：打开全新空库继续使用
+        await DatabaseHelper.instance.database;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// 数据变更后异步重建到期提醒通知（不阻塞主流程）

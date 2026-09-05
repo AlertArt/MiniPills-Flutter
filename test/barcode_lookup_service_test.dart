@@ -120,4 +120,103 @@ void main() {
       );
     });
   });
+
+  group('联网追溯缓存', () {
+    test('命中进程内缓存时不再发起网络请求', () async {
+      var calls = 0;
+      final spy = MockClient((request) async {
+        calls++;
+        return http.Response(
+          jsonEncode({
+            'code': 0,
+            'data': {'found': true, 'name': '缓存药', 'brand': 'B'},
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      SharedPreferences.setMockInitialValues({});
+      final svc = BarcodeLookupService(client: spy);
+      final settings = const LookupSettings(url: 'https://x/api', key: '');
+      final first = await svc.lookup('6900001', settingsOverride: settings);
+      expect(first.found, isTrue);
+      expect(calls, 1);
+
+      final second = await svc.lookup('6900001', settingsOverride: settings);
+      expect(second.name, '缓存药');
+      expect(calls, 1, reason: '第二次命中缓存，不重复请求');
+    });
+
+    test('命中 shared_preferences 持久化缓存时不发起网络请求', () async {
+      var calls = 0;
+      final spy = MockClient((request) async {
+        calls++;
+        return http.Response('{}', 200);
+      });
+      final prefs = <String, Object>{
+        'lookupCache_6900002':
+            '{"found":true,"name":"持久化药","brand":"X","manufacturer":"","spec":"","image":""}',
+      };
+      SharedPreferences.setMockInitialValues(prefs);
+      final svc = BarcodeLookupService(client: spy);
+      final res = await svc.lookup(
+        '6900002',
+        settingsOverride: const LookupSettings(url: 'https://x/api', key: ''),
+      );
+      expect(res.found, isTrue);
+      expect(res.name, '持久化药');
+      expect(calls, 0);
+    });
+
+    test('未命中缓存时才发起网络请求并回写缓存', () async {
+      var calls = 0;
+      final spy = MockClient((request) async {
+        calls++;
+        return http.Response(
+          jsonEncode({
+            'code': 0,
+            'data': {'found': true, 'name': '新药', 'brand': 'N'},
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      SharedPreferences.setMockInitialValues({});
+      final svc = BarcodeLookupService(client: spy);
+      final res = await svc.lookup(
+        '6900003',
+        settingsOverride: const LookupSettings(url: 'https://x/api', key: ''),
+      );
+      expect(calls, 1);
+      expect(res.name, '新药');
+      // 缓存已写入 prefs
+      final cached = await SharedPreferences.getInstance();
+      expect(cached.getString('lookupCache_6900003'), contains('新药'));
+    });
+
+    test('clearCache 清空进程内存后仍命中持久化缓存，不重复请求', () async {
+      var calls = 0;
+      final spy = MockClient((request) async {
+        calls++;
+        return http.Response(
+          jsonEncode({
+            'code': 0,
+            'data': {'found': true, 'name': '药', 'brand': 'B'},
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      SharedPreferences.setMockInitialValues({});
+      final svc = BarcodeLookupService(client: spy);
+      final settings = const LookupSettings(url: 'https://x/api', key: '');
+      await svc.lookup('6900004', settingsOverride: settings);
+      expect(calls, 1);
+
+      svc.clearCache(); // 仅清空进程内缓存
+      final res = await svc.lookup('6900004', settingsOverride: settings);
+      expect(res.found, isTrue);
+      expect(calls, 1, reason: '持久化缓存仍命中，不再发起网络请求');
+    });
+  });
 }

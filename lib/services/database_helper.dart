@@ -33,6 +33,18 @@ class DatabaseHelper {
     _overridePath = path;
   }
 
+  /// 当前数据库文件路径（含测试覆盖路径）。内存库返回 ':memory:'。
+  Future<String> filePath() async =>
+      _overridePath ?? p.join(await getDatabasesPath(), _dbName);
+
+  /// 关闭当前连接但不清空测试覆盖路径（供完整性修复重建数据库文件用）
+  Future<void> forceClose() async {
+    try {
+      await _db?.close();
+    } catch (_) {}
+    _db = null;
+  }
+
   /// 测试用：关闭当前连接并清空路径，使下次调用重新打开数据库
   @visibleForTesting
   Future<void> reset() async {

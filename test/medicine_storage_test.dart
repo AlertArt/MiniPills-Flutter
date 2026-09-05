@@ -1,7 +1,9 @@
 // MedicineStorage 使用 SQLite 的单元测试（通过 sqflite_common_ffi 在内存中运行真实 SQLite）
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -428,6 +430,90 @@ void main() {
       expect(AddMedicineLogic.getTypeUnits('胶囊', custom: custom), ['板']);
       expect(AddMedicineLogic.getTypeUnits('口服液', custom: custom), ['瓶', 'ml']);
       expect(AddMedicineLogic.getTypeUnits('不存在类型', custom: custom), ['片']);
+    });
+  });
+
+  group('自动备份与完整性检查', () {
+    test('数据变更自动生成 JSON 自动备份', () async {
+      final tmp = await Directory.systemTemp.createTemp('mp_backup');
+      addTearDown(() async {
+        MedicineStorage.autoBackupDirOverride = null;
+        await tmp.delete(recursive: true);
+      });
+      MedicineStorage.autoBackupDirOverride = tmp.path;
+
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1'));
+      await storage.add(makeMedicine('m2'));
+      // 手动触发确保落盘（正常流程里 add 内部会自动触发）
+      await storage.autoBackupNow();
+
+      final files = tmp
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.json'))
+          .toList();
+      expect(files, isNotEmpty);
+      final decoded = jsonDecode(await files.first.readAsString()) as Map;
+      expect(decoded['medicines'], isNotEmpty);
+      expect(decoded['customTypes'], isA<List>());
+    });
+
+    test('数据库损坏后从最近自动备份兜底恢复，并保留损坏文件', () async {
+      final tmp = await Directory.systemTemp.createTemp('mp_repair');
+      final dbPath = p.join(tmp.path, 'repair.db');
+      addTearDown(() async {
+        MedicineStorage.autoBackupDirOverride = null;
+        await DatabaseHelper.instance.reset();
+        await tmp.delete(recursive: true);
+      });
+      MedicineStorage.autoBackupDirOverride = p.join(tmp.path, 'backups');
+      DatabaseHelper.instance.useDatabasePath(dbPath);
+
+      // 写入一条数据并生成自动备份
+      final storage = MedicineStorage();
+      await storage.add(makeMedicine('m1'));
+      await storage.autoBackupNow();
+      expect(await storage.loadAll(), hasLength(1));
+
+      // 模拟数据库被写坏
+      await DatabaseHelper.instance.reset();
+      await File(dbPath).writeAsString(
+        'THIS IS NOT A SQLITE DATABASE FILE.'.padRight(4096, 'X'),
+      );
+
+      DatabaseHelper.instance.useDatabasePath(dbPath);
+      final ok = await MedicineStorage.runIntegrityCheckAndRepair();
+      expect(ok, isTrue);
+
+      final recovered = await MedicineStorage().loadAll();
+      expect(recovered, hasLength(1));
+      expect(recovered.single.name, '布洛芬');
+
+      // 损坏文件保留以便人工恢复/取证
+      final corruptFiles = tmp
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.contains('corrupt'))
+          .toList();
+      expect(corruptFiles, isNotEmpty);
+    });
+
+    test('无自动备份时损坏数据库重建为空库且不抛错', () async {
+      final tmp = await Directory.systemTemp.createTemp('mp_repair_empty');
+      final dbPath = p.join(tmp.path, 'empty.db');
+      addTearDown(() async {
+        MedicineStorage.autoBackupDirOverride = null;
+        await DatabaseHelper.instance.reset();
+        await tmp.delete(recursive: true);
+      });
+      MedicineStorage.autoBackupDirOverride = p.join(tmp.path, 'no_backups');
+      DatabaseHelper.instance.useDatabasePath(dbPath);
+      await File(dbPath).writeAsString('GARBAGE NOT SQLITE'.padRight(2048, '#'));
+
+      final ok = await MedicineStorage.runIntegrityCheckAndRepair();
+      expect(ok, isTrue);
+      expect(await MedicineStorage().loadAll(), isEmpty);
     });
   });
 }

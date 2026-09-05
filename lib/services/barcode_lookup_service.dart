@@ -45,6 +45,11 @@ class BarcodeLookupService {
   // shared_preferences 的持久化键
   static const String _urlKey = 'lookupApiUrl';
   static const String _keyKey = 'lookupApiKey';
+  // 查询结果缓存键（存 JSON 字符串），键前缀 + 条码
+  static const String _cacheKeyPrefix = 'lookupCache_';
+
+  // 进程内缓存（条码 -> MedicineLookupResult），避免重复请求
+  final Map<String, MedicineLookupResult> _memoryCache = {};
 
   Future<LookupSettings> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -57,6 +62,55 @@ class BarcodeLookupService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_urlKey, url.trim());
     await prefs.setString(_keyKey, key.trim());
+  }
+
+  /// 进程内缓存，命中同一条码直接返回，不发起网络请求。
+  MedicineLookupResult? cached(String barcode) => _memoryCache[barcode.trim()];
+
+  /// 清空进程内缓存（在测试或设置变更后调用）
+  void clearCache() => _memoryCache.clear();
+
+  /// 从 shared_preferences 读取该条码的持久化缓存（无则返回 null）。
+  /// 失败（如本地无该插件/格式异常）时静默回退 null。
+  Future<MedicineLookupResult?> loadCached(String barcode) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKeyPrefix + barcode.trim());
+      if (raw == null) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+      final res = MedicineLookupResult(
+        found: decoded['found'] == true,
+        name: (decoded['name'] as String?) ?? '',
+        brand: (decoded['brand'] as String?) ?? '',
+        manufacturer: (decoded['manufacturer'] as String?) ?? '',
+        spec: (decoded['spec'] as String?) ?? '',
+        image: (decoded['image'] as String?) ?? '',
+      );
+      _memoryCache[barcode.trim()] = res;
+      return res;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 写入该条码的持久化缓存（成功后同时更新进程内缓存）。失败静默忽略。
+  Future<void> saveCached(String barcode, MedicineLookupResult result) async {
+    _memoryCache[barcode.trim()] = result;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _cacheKeyPrefix + barcode.trim(),
+        jsonEncode({
+          'found': result.found,
+          'name': result.name,
+          'brand': result.brand,
+          'manufacturer': result.manufacturer,
+          'spec': result.spec,
+          'image': result.image,
+        }),
+      );
+    } catch (_) {}
   }
 
   bool isConfigured(LookupSettings settings) {
@@ -74,6 +128,12 @@ class BarcodeLookupService {
   }) async {
     final code = barcode.trim();
     if (code.isEmpty) return const MedicineLookupResult(found: false);
+
+    // 先查内存缓存；未命中再查持久化缓存；都没有才发起网络请求。
+    final memCached = _memoryCache[code];
+    if (memCached != null) return memCached;
+    final persisted = await loadCached(code);
+    if (persisted != null) return persisted;
 
     final settings = settingsOverride ?? await loadSettings();
     if (!isConfigured(settings)) {
@@ -103,9 +163,11 @@ class BarcodeLookupService {
       throw Exception('药品查询返回格式异常');
     }
     if (data['found'] == false) {
-      return const MedicineLookupResult(found: false);
+      final miss = const MedicineLookupResult(found: false);
+      await saveCached(code, miss);
+      return miss;
     }
-    return MedicineLookupResult(
+    final result = MedicineLookupResult(
       found: true,
       name: (data['name'] as String?) ?? '',
       brand: (data['brand'] as String?) ?? '',
@@ -113,5 +175,7 @@ class BarcodeLookupService {
       spec: (data['spec'] as String?) ?? '',
       image: (data['image'] as String?) ?? '',
     );
+    await saveCached(code, result);
+    return result;
   }
 }

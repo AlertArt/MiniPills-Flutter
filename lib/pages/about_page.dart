@@ -1,33 +1,46 @@
 // 关于页面 —— App 信息与数据安全提示
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../theme.dart';
 
-class AboutPage extends StatelessWidget {
+class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
 
-  /// 与 pubspec.yaml 中的 version 保持一致
-  static const String appVersion = '1.0.4';
   static const String appName = 'MiniPills';
 
   @override
+  State<AboutPage> createState() => _AboutPageState();
+}
+
+class _AboutPageState extends State<AboutPage> {
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() => _version = info.version);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final surface = Theme.of(context).colorScheme.surface;
+    final sub = Theme.of(context).colorScheme.onSurfaceVariant;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      appBar: AppBar(
-        title: const Text('关于'),
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.brandText,
-        elevation: 0,
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('关于')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: surface,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -35,15 +48,14 @@ class AboutPage extends StatelessWidget {
                 const Icon(Icons.medication,
                     size: 48, color: AppColors.brandBlue),
                 const SizedBox(height: 12),
-                const Text(appName,
-                    style: TextStyle(
-                        fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.brandText)),
+                const Text(AboutPage.appName,
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                Text('版本 $appVersion',
-                    style: const TextStyle(fontSize: 14, color: Color(0xFF8A9BAD))),
+                Text('版本 ${_version.isEmpty ? '…' : _version}',
+                    style: TextStyle(fontSize: 14, color: sub)),
                 const SizedBox(height: 6),
-                const Text('家庭药品管理 · 扫码追溯 · 到期提醒',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF8A9BAD))),
+                Text('家庭药品管理 · 扫码追溯 · 到期提醒',
+                    style: TextStyle(fontSize: 13, color: sub)),
               ],
             ),
           ),
@@ -51,7 +63,7 @@ class AboutPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: surface,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.brandDanger.withValues(alpha: 0.4)),
             ),

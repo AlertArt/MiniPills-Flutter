@@ -115,13 +115,20 @@ class NotificationService {
       final date = _parseExpire(m.expireDate);
       if (date == null) continue;
       final daysLeft = _daysUntil(date);
-      if (daysLeft < -1) continue; // 已过期超过 1 天不再提醒
-      if (daysLeft > window) continue; // 尚未进入提醒窗口
+      if (!shouldRemind(daysLeft, window)) continue; // 已过期>1天或未进入窗口，不提醒
 
       final title = '药品到期提醒';
       final body = _buildBody(m, daysLeft);
       await _scheduleDaily(index++, title, body);
     }
+  }
+
+  /// 判断某剩余天数是否应在当前提醒窗口内被提醒（纯逻辑，便于测试）。
+  /// [daysLeft] < -1（已过期超过 1 天）返回 false；[daysLeft] <= [window] 且 >= -1 返回 true。
+  static bool shouldRemind(int daysLeft, int window) {
+    if (daysLeft < -1) return false;
+    if (daysLeft > window) return false;
+    return true;
   }
 
   /// 后台预热：读取持久化的提醒天数（失败回退默认，绝不挂起）
