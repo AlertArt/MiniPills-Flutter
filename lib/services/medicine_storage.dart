@@ -137,17 +137,6 @@ class MedicineStorage {
     );
   }
 
-  /// 删除自定义药品类型
-  Future<void> deleteCustomType(String name) async {
-    await _migrateIfNeeded();
-    final db = await _db.database;
-    await db.delete(
-      DatabaseHelper.customTypesTable,
-      where: 'name = ?',
-      whereArgs: [name],
-    );
-  }
-
   /// 读取药品列表
   Future<List<Medicine>> loadAll() async {
     await _migrateIfNeeded();
@@ -267,26 +256,29 @@ class MedicineStorage {
     unawaited(_rescheduleNotifications());
   }
 
-  /// 导出 JSON 备份：包含全部药品与自定义位置
+  /// 导出 JSON 备份：包含全部药品、自定义位置与自定义类型
   Future<String> exportBackup() async {
     final items = await loadAll();
     final custom = await loadCustomLocations();
+    final customTypes = await loadCustomTypes();
     return jsonEncode({
-      'version': 1,
+      'version': 2,
       'app': 'MiniPills',
       'exported_at': DateTime.now().toIso8601String(),
       'medicines': items.map((e) => e.toJson()).toList(),
       'customLocations': custom,
+      'customTypes': customTypes.map((e) => e.toMap()).toList(),
     });
   }
 
-  /// 从 JSON 备份字符串恢复数据（全量替换已有药品与自定义位置）。
-  /// 返回 (药品数, 位置数)。
-  Future<({int medicines, int locations})> importBackup(String source) async {
+  /// 从 JSON 备份字符串恢复数据（全量替换已有药品、自定义位置与自定义类型）。
+  /// 返回 (药品数, 位置数, 类型数)。
+  Future<({int medicines, int locations, int types})> importBackup(String source) async {
     final data = jsonDecode(source);
     if (data is! Map) throw const FormatException('无效的备份文件格式');
     final rawMeds = data['medicines'];
     final rawLocs = data['customLocations'];
+    final rawTypes = data['customTypes'];
     if (rawMeds is! List) throw const FormatException('备份缺少 medicines 字段');
 
     await _migrateIfNeeded();
@@ -306,10 +298,23 @@ class MedicineStorage {
       }
     }
 
+    final customTypes = <CustomType>[];
+    if (rawTypes is List) {
+      for (final t in rawTypes) {
+        if (t is Map) {
+          final ct = CustomType.fromMap(Map<String, dynamic>.from(t));
+          if (ct.name.trim().isNotEmpty) {
+            customTypes.add(ct);
+          }
+        }
+      }
+    }
+
     final db = await _db.database;
     await db.transaction((txn) async {
       await txn.delete(DatabaseHelper.medicinesTable);
       await txn.delete(DatabaseHelper.customLocationsTable);
+      await txn.delete(DatabaseHelper.customTypesTable);
       final batch = txn.batch();
       for (final m in medicines) {
         batch.insert(
@@ -325,10 +330,64 @@ class MedicineStorage {
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
       }
+      for (final ct in customTypes) {
+        batch.insert(
+          DatabaseHelper.customTypesTable,
+          {'name': ct.name, 'units': jsonEncode(ct.units)},
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
       await batch.commit(noResult: true);
     });
     unawaited(_rescheduleNotifications());
-    return (medicines: medicines.length, locations: locations.length);
+    return (
+      medicines: medicines.length,
+      locations: locations.length,
+      types: customTypes.length,
+    );
+  }
+
+  /// 重命名自定义类型，并同步更新使用该类型的所有药品
+  Future<void> renameCustomType(String oldName, String newName) async {
+    final t = newName.trim();
+    if (t.isEmpty) return;
+    await _migrateIfNeeded();
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      // 类型表自身更新
+      await txn.update(
+        DatabaseHelper.customTypesTable,
+        {'name': t},
+        where: 'name = ?',
+        whereArgs: [oldName],
+      );
+      // 同步更新使用该类型的所有药品
+      await txn.update(
+        DatabaseHelper.medicinesTable,
+        {'medType': t},
+        where: 'medType = ?',
+        whereArgs: [oldName],
+      );
+    });
+  }
+
+  /// 删除自定义类型。当类型被药品使用时，将该药品的 medType 置空（视为未设置），避免残留失效类型引用。
+  Future<void> deleteCustomType(String name) async {
+    await _migrateIfNeeded();
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        DatabaseHelper.customTypesTable,
+        where: 'name = ?',
+        whereArgs: [name],
+      );
+      await txn.update(
+        DatabaseHelper.medicinesTable,
+        {'medType': null},
+        where: 'medType = ?',
+        whereArgs: [name],
+      );
+    });
   }
 
   /// 数据变更后异步重建到期提醒通知（不阻塞主流程）

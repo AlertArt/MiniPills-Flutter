@@ -251,31 +251,36 @@ void main() {
       expect(await storage.loadAll(), hasLength(1));
     });
 
-    test('exportBackup 生成包含药品与自定义位置的 JSON', () async {
+    test('exportBackup 生成包含药品、自定义位置与类型的 JSON', () async {
       final storage = MedicineStorage();
       await storage.add(makeMedicine('m1', name: '布洛芬'));
       await storage.add(makeMedicine('m2', name: '泰诺'));
       await storage.addCustomLocation('床头柜');
+      await storage.addCustomType('膏药', ['张', '盒']);
 
       final json = await storage.exportBackup();
       final data = jsonDecode(json) as Map<String, dynamic>;
-      expect(data['version'], 1);
+      expect(data['version'], 2);
       final meds = data['medicines'] as List;
       expect(meds, hasLength(2));
       expect((data['customLocations'] as List).toSet(), {'床头柜'});
+      final types = data['customTypes'] as List;
+      final paste = types.firstWhere((e) => (e as Map)['name'] == '膏药') as Map;
+      expect(paste['units'], ['张', '盒']);
       // 药品保留完整字段
       final first = meds.firstWhere((e) => (e as Map)['id'] == 'm1') as Map;
       expect(first['name'], '布洛芬');
       expect(first['images'], ['/img/a.png', '/img/b.png']);
     });
 
-    test('importBackup 全量替换药品与自定义位置', () async {
+    test('importBackup 全量替换药品、自定义位置与类型', () async {
       final storage = MedicineStorage();
       await storage.add(makeMedicine('m1', name: '旧药'));
       await storage.addCustomLocation('旧位置');
+      await storage.addCustomType('旧类型', ['片']);
 
       final json = jsonEncode({
-        'version': 1,
+        'version': 2,
         'app': 'MiniPills',
         'medicines': [
           {
@@ -290,16 +295,23 @@ void main() {
           }
         ],
         'customLocations': ['玄关柜', '床头柜'],
+        'customTypes': [
+          {'name': '膏药', 'units': ['张', '盒']},
+        ],
       });
 
       final counts = await storage.importBackup(json);
       expect(counts.medicines, 1);
       expect(counts.locations, 2);
+      expect(counts.types, 1);
 
       final all = await storage.loadAll();
       expect(all, hasLength(1));
       expect(all.first.name, '新药');
       expect(await storage.loadCustomLocations(), containsAll(['玄关柜', '床头柜']));
+      final types = await storage.loadCustomTypes();
+      expect(types.map((t) => t.name), contains('膏药'));
+      expect(types.map((t) => t.name), isNot(contains('旧类型')));
       // 旧数据不再存在
       expect(all.map((m) => m.name), isNot(contains('旧药')));
     });
@@ -349,6 +361,46 @@ void main() {
       final types = await storage.loadCustomTypes();
       expect(types.map((t) => t.name), isNot(contains('膏药')));
       expect(types, hasLength(1));
+    });
+
+    test('renameCustomType 重命名并同步更新使用该类型的药品', () async {
+      final storage = MedicineStorage();
+      await storage.addCustomType('膏药', ['张']);
+      await storage.add(makeMedicine('m1', name: '风湿膏', location: '药箱（客厅）'));
+
+      // 为 m1 设置 medType = 膏药
+      final m = (await storage.loadAll()).first;
+      final updated = Medicine(
+        id: m.id,
+        name: m.name,
+        medType: '膏药',
+        expireDate: m.expireDate,
+        stock: m.stock,
+        unit: m.unit,
+        location: m.location,
+      );
+      await storage.update(m.id, updated);
+
+      await storage.renameCustomType('膏药', '贴膏');
+      final types = await storage.loadCustomTypes();
+      expect(types.map((t) => t.name), contains('贴膏'));
+      expect(types.map((t) => t.name), isNot(contains('膏药')));
+      expect((await storage.loadAll()).first.medType, '贴膏');
+    });
+
+    test('deleteCustomType 删除时清空使用该类型药品的 medType', () async {
+      final storage = MedicineStorage();
+      await storage.addCustomType('膏药', ['张']);
+      await storage.add(makeMedicine('m1', name: '风湿膏', location: '药箱（客厅）'));
+      final m = (await storage.loadAll()).first;
+      await storage.update(
+        m.id,
+        m.copyWith(medType: '膏药'),
+      );
+
+      await storage.deleteCustomType('膏药');
+      expect(await storage.loadCustomTypes(), isEmpty);
+      expect((await storage.loadAll()).first.medType, isNull);
     });
   });
 

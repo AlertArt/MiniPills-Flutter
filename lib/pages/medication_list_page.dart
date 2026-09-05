@@ -16,6 +16,7 @@ import '../theme.dart';
 import 'about_page.dart';
 import 'add_medicine_page.dart';
 import 'medicine_detail_page.dart';
+import 'type_manage_page.dart';
 
 class MedicationListPage extends ConsumerStatefulWidget {
   const MedicationListPage({super.key});
@@ -352,6 +353,16 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
               },
             ),
             _sheetItem(
+              icon: '🏷',
+              text: '类型管理',
+              color: AppColors.brandTextSub,
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const TypeManagePage()));
+              },
+            ),
+            _sheetItem(
               icon: 'ℹ️',
               text: '关于',
               color: AppColors.brandTextSub,
@@ -451,7 +462,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
       if (!mounted) return;
       _refresh();
       messenger.showSnackBar(
-        SnackBar(content: Text('导入成功：药品 ${counts.medicines}，位置 ${counts.locations}')),
+        SnackBar(content: Text('导入成功：药品 ${counts.medicines}，位置 ${counts.locations}，类型 ${counts.types}')),
       );
     } catch (_) {
       messenger.showSnackBar(const SnackBar(content: Text('导入失败：备份文件无效')));
