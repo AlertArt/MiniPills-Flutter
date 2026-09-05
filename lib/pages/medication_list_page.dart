@@ -12,6 +12,7 @@ import '../models/med_list.dart';
 import '../models/medicine.dart';
 import '../providers.dart';
 import '../services/medicine_storage.dart';
+import '../services/notification_service.dart';
 import '../theme.dart';
 import 'about_page.dart';
 import 'add_medicine_page.dart';
@@ -353,6 +354,15 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
               },
             ),
             _sheetItem(
+              icon: '⏰',
+              text: '到期提醒设置',
+              color: AppColors.brandTextSub,
+              onTap: () {
+                Navigator.pop(ctx);
+                _showReminderSettings();
+              },
+            ),
+            _sheetItem(
               icon: '🏷',
               text: '类型管理',
               color: AppColors.brandTextSub,
@@ -530,6 +540,56 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
           ),
         ],
       ),
+    );
+  }
+
+  // ===== 到期提醒天数设置 =====
+  Future<void> _showReminderSettings() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final current = await NotificationService.instance.loadReminderDays();
+    if (!mounted) return;
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
+              child: Text('到期提前提醒天数',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('选择「0」= 仅到期当天提醒',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF8A9BAD))),
+            ),
+            for (final days in const [0, 3, 7, 14, 30])
+              ListTile(
+                title: Text(days == 0 ? '仅到期当天（0 天）' : '$days 天',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: current == days ? FontWeight.w700 : FontWeight.w400,
+                      color: current == days ? AppColors.brandBlue : AppColors.brandText,
+                    )),
+                onTap: () => Navigator.pop(ctx, days),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await NotificationService.instance.saveReminderDays(selected);
+    // 立即按新设置重建通知
+    await _storage.rescheduleNotifications();
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text('已设置：到期提前 ${selected == 0 ? '当天' : '$selected 天'}提醒')),
     );
   }
 

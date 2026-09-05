@@ -215,6 +215,7 @@ class MedicineStorage {
       }
       await batch.commit(noResult: true);
     });
+    unawaited(_rescheduleNotifications());
   }
 
   /// 新增药品
@@ -399,6 +400,9 @@ class MedicineStorage {
       // 通知失败不影响数据操作
     }
   }
+
+  /// 公开的提醒重建入口（供设置变更后主动调用）
+  Future<void> rescheduleNotifications() => _rescheduleNotifications();
 
   /// 启动时初始化通知服务并请求权限（含首次调度）
   static Future<void> initNotifications() async {

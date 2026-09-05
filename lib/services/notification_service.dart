@@ -2,13 +2,16 @@
 // 使用 flutter_local_notifications + timezone 调度本地通知。
 // 每次药品数据变更后调用 rescheduleAll() 重建到期提醒。
 
+import 'dart:async';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models/medicine.dart';
 
-/// 到期提醒：在到期前 [reminderDays] 天内，每天提醒一次。
+/// 到期提醒：在到期前 [reminderDays] 天内，每天提醒一次（天数可配置，默认 7）。
 /// 即将到期（0 天后到期）与已到期各提醒一次。
 class NotificationService {
   NotificationService._();
@@ -18,11 +21,43 @@ class NotificationService {
 
   bool _initialized = false;
 
-  /// 到期前多少天开始提醒（含当天）
-  static const int reminderDays = 7;
+  /// 到期前多少天开始提醒（含当天），默认 7
+  static const int defaultReminderDays = 7;
+
+  /// 当前提醒窗口（缓存，避免每次调度都读 shared_preferences）
+  int _reminderDays = defaultReminderDays;
+  bool _reminderDaysLoaded = false;
+
+  /// shared_preferences 的存储键
+  static const String _reminderDaysKey = 'reminderDays';
 
   static const String _channelId = 'expiry_reminder';
   static const String _channelName = '药品到期提醒';
+
+  /// 读取到期提醒天数设置（默认 7，限制 0~30；0 表示只提醒到期当天）。
+  /// 结果会被缓存；读不到或失败时回退默认值，绝不挂起调用方。
+  Future<int> loadReminderDays() async {
+    if (_reminderDaysLoaded) return _reminderDays;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getInt(_reminderDaysKey);
+      if (v != null) _reminderDays = v;
+    } catch (_) {}
+    _reminderDays = _reminderDays.clamp(0, 30);
+    _reminderDaysLoaded = true;
+    return _reminderDays;
+  }
+
+  /// 保存到期提醒天数设置（0 表示只提醒到期当天），由调用方触发重建
+  Future<void> saveReminderDays(int days) async {
+    final v = days.clamp(0, 30);
+    _reminderDays = v;
+    _reminderDaysLoaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_reminderDaysKey, v);
+    } catch (_) {}
+  }
 
   /// 初始化插件、申请权限、设置时区。
   Future<void> init() async {
@@ -62,10 +97,18 @@ class NotificationService {
   }
 
   /// 根据全部药品重建到期提醒（先清空旧的，再按需调度）。
+  /// 提醒窗口 = 到期前 [reminderDays] 天（含当天）至到期日。
   Future<void> rescheduleAll(List<Medicine> items) async {
     await init();
     await _cancelAll();
     if (items.isEmpty) return;
+
+    // 使用缓存值，避免每次调度读取 shared_preferences（测试/无平台通道时不会挂起）。
+    // 若从未加载过，尝试后台预热一次（失败不影响本次调度）。
+    if (!_reminderDaysLoaded) {
+      unawaited(prefetchReminderDays());
+    }
+    final window = _reminderDays;
 
     var index = 0;
     for (final m in items) {
@@ -73,11 +116,17 @@ class NotificationService {
       if (date == null) continue;
       final daysLeft = _daysUntil(date);
       if (daysLeft < -1) continue; // 已过期超过 1 天不再提醒
+      if (daysLeft > window) continue; // 尚未进入提醒窗口
 
       final title = '药品到期提醒';
       final body = _buildBody(m, daysLeft);
       await _scheduleDaily(index++, title, body);
     }
+  }
+
+  /// 后台预热：读取持久化的提醒天数（失败回退默认，绝不挂起）
+  Future<void> prefetchReminderDays() async {
+    await loadReminderDays();
   }
 
   String _buildBody(Medicine m, int daysLeft) {
