@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build APK & Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.2
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build universal APK
+        run: flutter build apk --release
+
+      - name: Build split APKs (per ABI)
+        run: flutter build apk --release --split-per-abi
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p dist
+          cp -f build/app/outputs/flutter-apk/app-release.apk    dist/MiniPills-universal.apk
+          cp -f build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/MiniPills-arm64-v8a.apk
+          cp -f build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk dist/MiniPills-armeabi-v7a.apk
+          cp -f build/app/outputs/flutter-apk/app-x86_64-release.apk      dist/MiniPills-x86_64.apk
+          ls -la dist
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.apk \
+            --title "MiniPills $GITHUB_REF_NAME" \
+            --notes "请按设备架构下载对应 APK；通用包（universal）包含全部架构，体积较大。"
