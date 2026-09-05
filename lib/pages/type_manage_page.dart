@@ -110,21 +110,19 @@ class _TypeManagePageState extends ConsumerState<TypeManagePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text('类型管理'),
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.brandText,
-        elevation: 0,
-        centerTitle: true,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AppColors.brandBlue))
           : _types.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text('暂无自定义类型\n\n可在添加药品时选择「自定义类型…」创建',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Color(0xFF8A9BAD), height: 1.8)),
+                      style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          height: 1.8)),
                 )
               : ListView.separated(
                   padding: const EdgeInsets.all(16),
@@ -134,7 +132,7 @@ class _TypeManagePageState extends ConsumerState<TypeManagePage> {
                     final ct = _types[i];
                     return Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Theme.of(context).colorScheme.surface,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -145,19 +143,20 @@ class _TypeManagePageState extends ConsumerState<TypeManagePage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(ct.name,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
-                                        color: AppColors.brandText)),
+                                        color: Theme.of(context).colorScheme.onSurface)),
                                 const SizedBox(height: 2),
                                 Text('单位：${ct.units.join('、')}',
-                                    style: const TextStyle(
-                                        fontSize: 13, color: Color(0xFF8A9BAD))),
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
                               ],
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 20, color: Color(0xFF8A9BAD)),
+                            icon: const Icon(Icons.edit_outlined, size: 20),
                             tooltip: '重命名',
                             onPressed: () => _rename(ct),
                           ),

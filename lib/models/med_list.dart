@@ -87,8 +87,11 @@ class MedListItem {
   });
 }
 
+/// 库存不足阈值：库存数量低于该值视为「库存不足」
+const int lowStockThreshold = 5;
+
 /// 筛选 + 排序构建列表
-/// filters 支持：storageLocation, keyword, stage, urgent
+/// filters 支持：storageLocation, keyword, stage, urgent, medType, lowStock
 List<MedListItem> buildMedList(
   List<Medicine> items, {
   String? nowDate,
@@ -96,6 +99,8 @@ List<MedListItem> buildMedList(
   String? keyword,
   String? stage,
   bool? urgent,
+  String? medType,
+  bool? lowStock,
 }) {
   final result = items.map((item) {
     final info = computeStatus(item.expireDate, nowDate);
@@ -123,6 +128,12 @@ List<MedListItem> buildMedList(
       return false;
     }
     if (urgent == true && item.stage == 'normal') {
+      return false;
+    }
+    if (medType != null && medType.isNotEmpty && item.medicine.medType != medType) {
+      return false;
+    }
+    if (lowStock == true && item.medicine.stock >= lowStockThreshold) {
       return false;
     }
     return true;

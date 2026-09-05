@@ -177,7 +177,7 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
     final types = AddMedicineLogic.getTypes(custom: customTypes);
     final sel = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -209,7 +209,7 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
     if (_stockUnits.length <= 1) return;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -281,7 +281,7 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
   Future<ImageSource?> _chooseSource(String title) async {
     return showModalBottomSheet<ImageSource>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -463,7 +463,7 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
   Future<void> _showDatePicker() async {
     final result = await showModalBottomSheet<(int, int)>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -512,7 +512,7 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
     final locs = AddMedicineLogic.getLocations(custom: custom);
     final result = await showModalBottomSheet<String?>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -674,10 +674,10 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
   }) {
     return TextField(
       controller: controller,
-      style: const TextStyle(fontSize: 16, color: AppColors.brandText),
+      style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Color(0xFFB9C6D2)),
+        hintStyle: TextStyle(color: Theme.of(context).hintColor),
         isDense: true,
         border: InputBorder.none,
       ),
@@ -690,7 +690,7 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
     required String placeholder,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+return GestureDetector(
       onTap: onTap,
       child: Row(
         children: [
@@ -699,11 +699,15 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
               value.isEmpty ? placeholder : value,
               style: TextStyle(
                 fontSize: 16,
-                color: value.isEmpty ? const Color(0xFFB9C6D2) : AppColors.brandText,
+                color: value.isEmpty
+                    ? Theme.of(context).hintColor
+                    : Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
-          const Text('⌄', style: TextStyle(fontSize: 16, color: AppColors.brandTextSub)),
+          Text('⌄',
+              style: TextStyle(
+                  fontSize: 16, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ],
       ),
     );
@@ -717,18 +721,19 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
+decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+children: [
           if (title.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(title,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF666666))),
+                  style: TextStyle(
+                      fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
           child,
         ],
@@ -787,8 +792,8 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
+decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -808,8 +813,8 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
+decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -935,15 +940,15 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('库存量', style: TextStyle(fontSize: 13, color: Color(0xFF666666))),
+            const Text('库存量', style: TextStyle(fontSize: 13)),
             Row(
               children: [
                 Container(
                   width: 70,
                   height: 32,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.brandBlueBg,
+decoration: BoxDecoration(
+                    color: context.appBlueBg,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: TextField(
@@ -1007,8 +1012,8 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
                     child: Container(
                       height: 36,
                       alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: _stock == n ? AppColors.brandBlueBg : const Color(0xFFEEF3F8),
+decoration: BoxDecoration(
+                        color: _stock == n ? context.appBlueBg : context.appCard,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -1016,7 +1021,9 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: _stock == n ? FontWeight.w500 : FontWeight.w400,
-                          color: _stock == n ? AppColors.brandBlue : const Color(0xFF666666),
+                          color: _stock == n
+                              ? AppColors.brandBlue
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -1029,8 +1036,8 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
     );
   }
 
-  TextStyle get _stockLabelStyle =>
-      const TextStyle(fontSize: 12, color: Color(0xFF999999));
+TextStyle get _stockLabelStyle => TextStyle(
+    fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant);
 
   Widget _buildSubmitRow() {
     return Column(
@@ -1044,13 +1051,13 @@ class _AddMedicinePageState extends ConsumerState<AddMedicinePage> {
           child: Text(_submitText),
         ),
         const SizedBox(height: 10),
-        OutlinedButton(
+OutlinedButton(
           onPressed: () => Navigator.pop(context, true),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size.fromHeight(48),
-            foregroundColor: AppColors.brandTextSub,
+            foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            side: const BorderSide(color: AppColors.brandBorder),
+side: BorderSide(color: Theme.of(context).dividerColor),
           ),
           child: const Text('药品盘点', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         ),
@@ -1243,10 +1250,15 @@ Widget _pickerHeader(BuildContext context, String title, {required VoidCallback 
       children: [
         GestureDetector(
           onTap: () => Navigator.pop(context),
-          child: const Text('取消', style: TextStyle(fontSize: 14, color: Color(0xFF999999))),
+          child: Text('取消',
+              style: TextStyle(
+                  fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ),
         Text(title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.brandText)),
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurface)),
         GestureDetector(
           onTap: onConfirm,
           child: const Text('确定', style: TextStyle(fontSize: 14, color: AppColors.brandBlue)),

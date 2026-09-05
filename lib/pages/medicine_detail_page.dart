@@ -109,7 +109,7 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
   Future<ImageSource?> _chooseSource(String title) async {
     return showModalBottomSheet<ImageSource>(
       context: context,
-      backgroundColor: Colors.white,
+backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -184,7 +184,7 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
     }
     final result = await showModalBottomSheet<(int, int)>(
       context: context,
-      backgroundColor: Colors.white,
+backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -210,7 +210,7 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
     final locs = AddMedicineLogic.getLocations(custom: custom);
     final result = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.white,
+backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -282,7 +282,7 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
     final info = computeStatus(_expireDate.isEmpty ? null : _expireDate, null);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('药品详情'),
+title: const Text('药品详情'),
         automaticallyImplyLeading: true,
         actions: [
           TextButton(
@@ -290,7 +290,9 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
             child: Text(_editing ? '取消' : '编辑',
                 style: TextStyle(
                   fontSize: 14,
-                  color: _editing ? AppColors.brandTextSub : AppColors.brandBlue,
+                  color: _editing
+                      ? Theme.of(context).colorScheme.onSurfaceVariant
+                      : AppColors.brandBlue,
                 )),
           ),
         ],
@@ -327,12 +329,12 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
     );
   }
 
-  Widget _buildDetailCard(
+Widget _buildDetailCard(
       ({int daysLeft, String status, String stage, String stageText}) info) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -485,10 +487,10 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
     if (!_editing) {
       return _valueText(value.isEmpty ? '-' : value);
     }
-    return TextField(
+return TextField(
       controller: _fieldController(field),
       enabled: _editing,
-      style: const TextStyle(fontSize: 20, color: AppColors.brandText),
+      style: TextStyle(fontSize: 20, color: Theme.of(context).colorScheme.onSurface),
       decoration: const InputDecoration(
         isDense: true,
         border: InputBorder.none,
@@ -504,7 +506,7 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
   }
 
   Widget _valueText(String v) => Text(v,
-      style: const TextStyle(fontSize: 20, color: AppColors.brandText));
+      style: TextStyle(fontSize: 20, color: Theme.of(context).colorScheme.onSurface));
 
   /// 选择型字段：编辑模式下可点击打开选择器，非编辑模式显示普通文本
   Widget _selectableField({required String value, required VoidCallback onTap}) {
@@ -515,9 +517,9 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
       onTap: onTap,
       child: Row(
         children: [
-          Expanded(
+Expanded(
             child: Text(value,
-                style: const TextStyle(fontSize: 20, color: AppColors.brandText)),
+                style: TextStyle(fontSize: 20, color: Theme.of(context).colorScheme.onSurface)),
           ),
           const Text('⌄', style: TextStyle(fontSize: 20, color: AppColors.brandBlue)),
         ],
@@ -525,13 +527,15 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
     );
   }
 
-  Widget _stockRow() {
+Widget _stockRow() {
+    final textColor = Theme.of(context).colorScheme.onSurface;
+    final subColor = Theme.of(context).colorScheme.onSurfaceVariant;
     if (!_editing) {
       return Row(
         children: [
-          Text('$_stock', style: const TextStyle(fontSize: 20, color: AppColors.brandText)),
+          Text('$_stock', style: TextStyle(fontSize: 20, color: textColor)),
           const SizedBox(width: 8),
-          Text(_unit, style: const TextStyle(fontSize: 16, color: AppColors.brandTextSub)),
+          Text(_unit, style: TextStyle(fontSize: 16, color: subColor)),
         ],
       );
     }
@@ -539,11 +543,11 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
       children: [
         _stepperBtn('-', () => _onStepper(-1)),
         const SizedBox(width: 12),
-        Text('$_stock', style: const TextStyle(fontSize: 20, color: AppColors.brandText)),
+        Text('$_stock', style: TextStyle(fontSize: 20, color: textColor)),
         const SizedBox(width: 12),
         _stepperBtn('+', () => _onStepper(1)),
         const SizedBox(width: 8),
-        Text(_unit, style: const TextStyle(fontSize: 16, color: AppColors.brandTextSub)),
+        Text(_unit, style: TextStyle(fontSize: 16, color: subColor)),
       ],
     );
   }
@@ -556,7 +560,7 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
         height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppColors.brandBlueBg,
+          color: context.appBlueBg,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(label,
@@ -568,13 +572,15 @@ class _MedicineDetailPageState extends ConsumerState<MedicineDetailPage> {
   Widget _fieldGroup({required String label, required Widget child}) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.brandBorder)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 16, color: AppColors.brandTextSub)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 16, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 6),
           child,
         ],
@@ -640,11 +646,13 @@ class _DetailYearMonthPickerState extends State<_DetailYearMonthPicker> {
                     itemExtent: 44,
                     physics: const FixedExtentScrollPhysics(),
                     onSelectedItemChanged: (i) => _yearIdx = i,
-                    childDelegate: ListWheelChildBuilderDelegate(
+childDelegate: ListWheelChildBuilderDelegate(
                       childCount: widget.years.length,
                       builder: (context, i) => Center(
                         child: Text('${widget.years[i]}年',
-                            style: const TextStyle(fontSize: 20, color: AppColors.brandText)),
+                            style: TextStyle(
+                                fontSize: 20,
+                                color: Theme.of(context).colorScheme.onSurface)),
                       ),
                     ),
                   ),
@@ -654,11 +662,13 @@ class _DetailYearMonthPickerState extends State<_DetailYearMonthPicker> {
                     itemExtent: 44,
                     physics: const FixedExtentScrollPhysics(),
                     onSelectedItemChanged: (i) => _monthIdx = i,
-                    childDelegate: ListWheelChildBuilderDelegate(
+childDelegate: ListWheelChildBuilderDelegate(
                       childCount: widget.months.length,
                       builder: (context, i) => Center(
                         child: Text('${widget.months[i]}月',
-                            style: const TextStyle(fontSize: 20, color: AppColors.brandText)),
+                            style: TextStyle(
+                                fontSize: 20,
+                                color: Theme.of(context).colorScheme.onSurface)),
                       ),
                     ),
                   ),
@@ -742,14 +752,16 @@ class _DetailLocationPickerState extends State<_DetailLocationPicker> {
               itemExtent: 44,
               physics: const FixedExtentScrollPhysics(),
               onSelectedItemChanged: (i) => _sel = i,
-              childDelegate: ListWheelChildBuilderDelegate(
+childDelegate: ListWheelChildBuilderDelegate(
                 childCount: displayItems.length,
                 builder: (context, i) => Center(
                   child: Text(displayItems[i],
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: i == _sel ? FontWeight.w600 : FontWeight.w400,
-                        color: i == _sel ? AppColors.brandBlue : const Color(0xFF8A9BAD),
+                        color: i == _sel
+                            ? AppColors.brandBlue
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                       )),
                 ),
               ),
@@ -770,10 +782,15 @@ Widget _detailPickerHeader(BuildContext context, String title, {required VoidCal
       children: [
         GestureDetector(
           onTap: () => Navigator.pop(context),
-          child: const Text('取消', style: TextStyle(fontSize: 14, color: Color(0xFF999999))),
+          child: Text('取消',
+              style: TextStyle(
+                  fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ),
         Text(title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.brandText)),
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurface)),
         GestureDetector(
           onTap: onConfirm,
           child: const Text('确定', style: TextStyle(fontSize: 14, color: AppColors.brandBlue)),

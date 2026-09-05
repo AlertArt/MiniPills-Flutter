@@ -17,6 +17,7 @@ import '../theme.dart';
 import 'about_page.dart';
 import 'add_medicine_page.dart';
 import 'medicine_detail_page.dart';
+import 'statistics_page.dart';
 import 'type_manage_page.dart';
 
 class MedicationListPage extends ConsumerStatefulWidget {
@@ -39,6 +40,11 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
   int _tabIndex = 0;
   List<String> _locationTabs = ['全部'];
   bool _noticeFilter = false;
+
+  // 筛选状态
+  String? _stageFilter; // 到期阶段，null=全部
+  bool _lowStockFilter = false; // 仅看库存不足
+  String? _typeFilter; // 药品类型，null=全部
 
   // 左滑状态
   String? _swipeId;
@@ -81,6 +87,9 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
       storageLocation: _tabIndex == 0 ? null : _locationTabs[_tabIndex],
       keyword: _keyword.isEmpty ? null : _keyword,
       urgent: _noticeFilter ? true : null,
+      stage: _stageFilter,
+      lowStock: _lowStockFilter ? true : null,
+      medType: _typeFilter,
     );
     setState(() {
       _noticeHas = notice.hasNotice;
@@ -130,7 +139,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
     final name = m.name.isEmpty ? '该药品' : m.name;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -318,7 +327,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
   void _onBackupMenuTap() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -370,6 +379,16 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
                 Navigator.pop(ctx);
                 Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const TypeManagePage()));
+              },
+            ),
+            _sheetItem(
+              icon: '📊',
+              text: '统计概览',
+              color: AppColors.brandTextSub,
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const StatisticsPage()));
               },
             ),
             _sheetItem(
@@ -550,7 +569,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
     if (!mounted) return;
     final selected = await showModalBottomSheet<int>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -593,6 +612,162 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
     );
   }
 
+  // ===== 高级筛选 =====
+  int get _activeFilterCount =>
+      (_stageFilter != null ? 1 : 0) + (_lowStockFilter ? 1 : 0) + (_typeFilter != null ? 1 : 0);
+
+  void _toggleStage(String? stage) {
+    setState(() => _stageFilter = _stageFilter == stage ? null : stage);
+    _applyFilter();
+  }
+
+  void _toggleLowStock() {
+    setState(() => _lowStockFilter = !_lowStockFilter);
+    _applyFilter();
+  }
+
+  void _toggleType(String? type) {
+    setState(() => _typeFilter = _typeFilter == type ? null : type);
+    _applyFilter();
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _stageFilter = null;
+      _lowStockFilter = false;
+      _typeFilter = null;
+    });
+    _applyFilter();
+  }
+
+  Future<void> _showFilterSheet() async {
+    List<String> types;
+    try {
+      final custom = await _storage.loadCustomTypes();
+      types = AddMedicineLogic.getTypes(custom: custom);
+    } catch (_) {
+      types = AddMedicineLogic.getTypes();
+    }
+    if (!mounted) return;
+    // 到期阶段选项（全部 + 各临期阶段）
+    const stageOptions = [
+      (key: 'expired', label: '已过期'),
+      (key: '3days', label: '3天内'),
+      (key: '1week', label: '一周内'),
+      (key: '15days', label: '半月内'),
+      (key: '1month', label: '一月内'),
+      (key: '3months', label: '3月内'),
+      (key: 'normal', label: '正常'),
+    ];
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          Widget stageChip(String key, String label) {
+            final selected = _stageFilter == key;
+            return ChoiceChip(
+              label: Text(label),
+              selected: selected,
+              onSelected: (_) {
+                setSheetState(() => _toggleStage(selected ? null : key));
+              },
+            );
+          }
+
+          Widget typeChip(String type) {
+            final selected = _typeFilter == type;
+            return ChoiceChip(
+              label: Text(type),
+              selected: selected,
+              onSelected: (_) {
+                setSheetState(() => _toggleType(selected ? null : type));
+              },
+            );
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('筛选',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                      ),
+                      if (_activeFilterCount > 0)
+                        TextButton(
+                          onPressed: () {
+                            setSheetState(_clearFilters);
+                          },
+                          child: const Text('重置'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text('到期阶段',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('全部'),
+                        selected: _stageFilter == null,
+                        onSelected: (_) => setSheetState(() => _toggleStage(null)),
+                      ),
+                      for (final opt in stageOptions)
+                        stageChip(opt.key, opt.label),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text('库存',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  ),
+                  ChoiceChip(
+                    label: Text('仅看库存不足（<$lowStockThreshold）'),
+                    selected: _lowStockFilter,
+                    onSelected: (_) => setSheetState(_toggleLowStock),
+                  ),
+                  const SizedBox(height: 16),
+                  if (types.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Text('药品类型',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('全部'),
+                          selected: _typeFilter == null,
+                          onSelected: (_) => setSheetState(() => _toggleType(null)),
+                        ),
+                        for (final t in types) typeChip(t),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -601,6 +776,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
           children: [
             _buildTopBar(),
             _buildTabs(),
+            if (_activeFilterCount > 0) _buildFilterBar(),
             if (_noticeHas) _buildNoticeBar(),
             Expanded(child: _buildContent()),
             _buildAddBar(),
@@ -616,7 +792,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
       child: Container(
         height: 44,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [
             BoxShadow(color: Color(0x0F000000), blurRadius: 8, offset: Offset(0, 2)),
@@ -640,23 +816,70 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
                   hintText: '搜索药品名称',
                   border: InputBorder.none,
                 ),
-                style: const TextStyle(fontSize: 16, color: AppColors.brandText),
+                style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface),
               ),
             ),
             if (_keyword.isNotEmpty)
-              GestureDetector(
-                onTap: _onClearSearch,
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Text('✕', style: TextStyle(fontSize: 16, color: Color(0xFF999999))),
+              Tooltip(
+                message: '清除搜索',
+                child: GestureDetector(
+                  onTap: _onClearSearch,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text('✕',
+                        style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  ),
                 ),
               ),
             const SizedBox(width: 4),
-            GestureDetector(
-              onTap: _onBackupMenuTap,
-              child: const Padding(
-                padding: EdgeInsets.all(4),
-                child: Text('☰', style: TextStyle(fontSize: 20, color: AppColors.brandTextSub)),
+            Tooltip(
+              message: '筛选',
+              child: GestureDetector(
+                onTap: _showFilterSheet,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        Icons.tune,
+                        size: 22,
+                        color: _activeFilterCount > 0
+                            ? AppColors.brandBlue
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      if (_activeFilterCount > 0)
+                        Positioned(
+                          right: -6,
+                          top: -6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppColors.brandDanger,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Text(
+                              '$_activeFilterCount',
+                              style: const TextStyle(
+                                  fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Tooltip(
+              message: '菜单',
+              child: GestureDetector(
+                onTap: _onBackupMenuTap,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text('☰',
+                      style: TextStyle(fontSize: 20, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ),
               ),
             ),
           ],
@@ -666,6 +889,8 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
   }
 
   Widget _buildTabs() {
+    final surface = Theme.of(context).colorScheme.surface;
+    final subColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return SizedBox(
       height: 46,
       child: ListView(
@@ -682,7 +907,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
                   alignment: Alignment.center,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   decoration: BoxDecoration(
-                    color: _tabIndex == i ? AppColors.brandBlue : Colors.white,
+                    color: _tabIndex == i ? AppColors.brandBlue : surface,
                     borderRadius: BorderRadius.circular(19),
                     boxShadow: _tabIndex == i
                         ? [
@@ -702,7 +927,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
-                      color: _tabIndex == i ? Colors.white : AppColors.brandTextSub,
+                      color: _tabIndex == i ? Colors.white : subColor,
                     ),
                   ),
                 ),
@@ -713,17 +938,60 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
     );
   }
 
+  Widget _buildFilterBar() {
+    final parts = <String>[
+      if (_stageFilter != null) stageText[_stageFilter] ?? '',
+      if (_lowStockFilter) '库存不足',
+      ?_typeFilter,
+    ];
+    final text = parts.where((p) => p.isNotEmpty).join(' · ');
+    final primary = Theme.of(context).colorScheme.primary;
+    return GestureDetector(
+      onTap: _showFilterSheet,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: context.appBlueBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: primary.withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.filter_alt, size: 16, color: primary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '已筛选：$text',
+                style: TextStyle(fontSize: 13, color: primary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text('✕ 清除', style: TextStyle(fontSize: 13, color: primary)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildNoticeBar() {
+    final scheme = Theme.of(context).colorScheme;
+    final primary = scheme.primary;
+    final secondary = scheme.secondary;
     return GestureDetector(
       onTap: _toggleNotice,
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: _noticeFilter ? AppColors.brandBlueBg : AppColors.brandMintBg,
+          color: _noticeFilter ? context.appBlueBg : context.appMintBg,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: _noticeFilter ? const Color(0xFFB6DCF5) : const Color(0xFFBFE8D5),
+            color: _noticeFilter
+                ? primary.withValues(alpha: 0.4)
+                : secondary.withValues(alpha: 0.4),
           ),
         ),
         child: Row(
@@ -739,7 +1007,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.5,
-                  color: _noticeFilter ? const Color(0xFF3A7CB8) : const Color(0xFF2E8B6C),
+                  color: _noticeFilter ? primary : AppColors.brandMint,
                 ),
               ),
             ),
@@ -748,7 +1016,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
               _noticeFilter ? '✕ 清除' : '›',
               style: TextStyle(
                 fontSize: 13,
-                color: _noticeFilter ? const Color(0xFF3A7CB8) : const Color(0xFF2E8B6C),
+                color: _noticeFilter ? primary : AppColors.brandMint,
               ),
             ),
           ],
@@ -844,7 +1112,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
                 duration: _swipeMoving ? Duration.zero : const Duration(milliseconds: 250),
                 transform: Matrix4.translationValues(isSwiping ? _swipeOffset : 0, 0, 0),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: const [
                     BoxShadow(
@@ -899,10 +1167,10 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
                   children: [
                     Text(
                       m.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.brandText,
+                        color: Theme.of(context).colorScheme.onSurface,
                         height: 1.4,
                       ),
                     ),
@@ -949,7 +1217,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
           SizedBox(
             width: 52,
             child: Text(label,
-                style: const TextStyle(fontSize: 15, color: AppColors.brandTextSub)),
+                style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
           Expanded(
             child: Text(
@@ -958,7 +1226,7 @@ class _MedicationListPageState extends ConsumerState<MedicationListPage> {
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w500,
-                color: valueColor ?? AppColors.brandText,
+                color: valueColor ?? Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -1018,13 +1286,14 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final sub = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('📦', style: TextStyle(fontSize: 48)),
-          SizedBox(height: 12),
-          Text('暂无药品数据', style: TextStyle(fontSize: 16, color: Color(0xFF999999))),
+          const Text('📦', style: TextStyle(fontSize: 48)),
+          const SizedBox(height: 12),
+          Text('暂无药品数据', style: TextStyle(fontSize: 16, color: sub)),
         ],
       ),
     );

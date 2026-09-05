@@ -231,6 +231,39 @@ void main() {
       final r = buildMedList(const [], nowDate: '2026-01-15');
       expect(r.length, 0);
     });
+
+    test('按 medType 筛选', () {
+      final a = med(id: '1', name: 'a', expireDate: '2027-01-01');
+      final b = Medicine(
+        id: '2',
+        name: 'b',
+        expireDate: '2027-01-01',
+        medType: '胶囊',
+      );
+      final r = buildMedList([a, b], nowDate: '2026-01-15', medType: '胶囊');
+      expect(r.length, 1);
+      expect(r[0].medicine.medType, '胶囊');
+    });
+
+    test('medType 筛选不区分空串与 null', () {
+      final a = Medicine(id: '1', name: 'a', expireDate: '2027-01-01', medType: '药片');
+      final b = Medicine(id: '2', name: 'b', expireDate: '2027-01-01');
+      final r = buildMedList([a, b], nowDate: '2026-01-15', medType: '药片');
+      expect(r.length, 1);
+      expect(r[0].medicine.name, 'a');
+    });
+
+    test('lowStock 只返回库存低于阈值的药品', () {
+      final items = [
+        med(id: '1', name: '很少', expireDate: '2027-01-01', stock: 2),
+        med(id: '2', name: '刚好', expireDate: '2027-01-01', stock: lowStockThreshold),
+        med(id: '3', name: '充足', expireDate: '2027-01-01', stock: 50),
+        med(id: '4', name: '零库存', expireDate: '2027-01-01', stock: 0),
+      ];
+      final r = buildMedList(items, nowDate: '2026-01-15', lowStock: true);
+      expect(r.length, 2);
+      expect(r.map((x) => x.medicine.name).toSet(), {'很少', '零库存'});
+    });
   });
 
   group('查找/更新/删除', () {
